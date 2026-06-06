@@ -1,14 +1,6 @@
 import banglaFontUrl from './assets/noto.ttf?url'
+import type { Student } from './types'
 import { depertmentDataOptions } from '../clearanceForm/form.data'
-
-export type Student = {
-  name: string
-  technology: string
-  roll: string
-  registrationNo: string
-  session: string
-  shift: string
-}
 
 export type ClearanceRow = {
   id: string
@@ -41,6 +33,7 @@ type ClearanceTableRow = {
 }
 
 export const clearanceStorageKey = 'gai-clearance-settings-v1'
+const clearanceDefaultsVersion = 2
 
 export const defaultClearanceRows: ClearanceRow[] = depertmentDataOptions.map((row, index) => ({
   id: `row-${index + 1}`,
@@ -63,6 +56,10 @@ export const defaultClearanceSettings: ClearanceSettings = {
   registrarSignature: '',
   principalSignature: '',
   treasurerSignature: '',
+}
+
+type StoredClearanceSettings = Partial<ClearanceSettings> & {
+  defaultsVersion?: number
 }
 
 let fontRegistered = false
@@ -236,14 +233,31 @@ export function loadClearanceSettings(): ClearanceSettings {
     const rawSettings = window.localStorage.getItem(clearanceStorageKey)
 
     if (!rawSettings) {
-      return structuredClone(defaultClearanceSettings)
+      const initialSettings = createDefaultClearanceSettings()
+      saveClearanceSettings(initialSettings)
+      return initialSettings
     }
 
-    const parsedSettings = JSON.parse(rawSettings) as Partial<ClearanceSettings>
+    const parsedSettings = JSON.parse(rawSettings) as StoredClearanceSettings
     const savedRows = parsedSettings.rows ?? []
 
+    if (parsedSettings.defaultsVersion !== clearanceDefaultsVersion) {
+      const migratedSettings = {
+        ...createDefaultClearanceSettings(),
+        verifyUrl: parsedSettings.verifyUrl ?? defaultClearanceSettings.verifyUrl,
+        rows: mergeDefaultRowsWithSavedSignatures(savedRows),
+        accountantSignature: parsedSettings.accountantSignature || '',
+        registrarSignature: parsedSettings.registrarSignature || '',
+        principalSignature: parsedSettings.principalSignature || '',
+        treasurerSignature: parsedSettings.treasurerSignature || '',
+      }
+
+      saveClearanceSettings(migratedSettings)
+      return migratedSettings
+    }
+
     return {
-      ...structuredClone(defaultClearanceSettings),
+      ...createDefaultClearanceSettings(),
       ...parsedSettings,
       title: parsedSettings.title === 'নো ডিউস / ক্লিয়ারেন্স ফরম'
         ? defaultClearanceSettings.title
@@ -263,12 +277,35 @@ export function loadClearanceSettings(): ClearanceSettings {
         : structuredClone(defaultClearanceRows),
     }
   } catch {
-    return structuredClone(defaultClearanceSettings)
+    return createDefaultClearanceSettings()
   }
 }
 
 export function saveClearanceSettings(settings: ClearanceSettings) {
-  window.localStorage.setItem(clearanceStorageKey, JSON.stringify(settings))
+  window.localStorage.setItem(
+    clearanceStorageKey,
+    JSON.stringify({
+      ...settings,
+      defaultsVersion: clearanceDefaultsVersion,
+    }),
+  )
+}
+
+function createDefaultClearanceSettings(): ClearanceSettings {
+  return structuredClone(defaultClearanceSettings)
+}
+
+function mergeDefaultRowsWithSavedSignatures(savedRows: ClearanceRow[]) {
+  return defaultClearanceRows.map((defaultRow) => {
+    const savedRow = savedRows.find((row) => row.id === defaultRow.id)
+
+    return {
+      ...defaultRow,
+      sign1: savedRow?.sign1 || '',
+      sign2: savedRow?.sign2 || '',
+      sign3: savedRow?.sign3 || '',
+    }
+  })
 }
 
 export async function createClearancePdfUrl(student: Student, settings: ClearanceSettings) {

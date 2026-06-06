@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import AppSidebar from './components/AppSidebar.vue'
+import AppTopbar from './components/AppTopbar.vue'
+import NoticeMessage from './components/NoticeMessage.vue'
 import {
   createClearancePdfUrl,
   defaultClearanceRows,
@@ -9,61 +12,26 @@ import {
   saveClearanceSettings as persistClearanceSettings,
   type ClearanceRow,
   type ClearanceSettings,
-  type Student,
 } from './clearancePdf'
+import {
+  createStudentCsv,
+  normalizeStudent,
+  parseStudentCsv,
+  requiredHeaders,
+  sessionOptions,
+  shiftOptions,
+  technologyOptions,
+  templateCsv,
+} from './lib/studentCsv'
+import type {
+  CsvFileNotice,
+  CsvFolderState,
+  PageKey,
+  StoredCsvImport,
+  Student,
+  StudentTableRow,
+} from './types'
 
-type PageKey = 'imports' | 'students' | 'clearance'
-
-type StoredCsvImport = {
-  id: string
-  fileName: string
-  updatedAt: string
-  rowCount: number
-  filePath: string
-  csvText: string
-  students: Student[]
-}
-
-type CsvFolderState = {
-  folderPath: string
-  files: StoredCsvImport[]
-}
-
-type CsvFileNotice = {
-  fileName: string
-  status: 'success' | 'error'
-  message: string
-  detail?: string
-}
-
-type StudentTableRow = Student & {
-  sourceFile: string
-  sourceFilePath: string
-  importId: string
-  rowIndex: number
-}
-
-const requiredHeaders = [
-  'name',
-  'technology',
-  'roll',
-  'registrationNo',
-  'session',
-  'shift',
-]
-
-const technologyOptions = [
-  'Computer Science and Technology',
-  'Printing Technology',
-  'Graphic Design',
-]
-
-const sessionOptions = Array.from({ length: 9 }, (_, index) => {
-  const startYear = 2021 + index
-  return `${startYear}-${startYear + 1}`
-})
-
-const shiftOptions = ['1st', '2nd']
 const signatureKeys = ['sign1', 'sign2', 'sign3'] as const
 const footerSignatureOptions = [
   { key: 'accountantSignature', label: 'Accountant' },
@@ -71,10 +39,7 @@ const footerSignatureOptions = [
   { key: 'principalSignature', label: 'Principal' },
   { key: 'treasurerSignature', label: 'Treasurer' },
 ] as const
-
-const templateCsv = `${requiredHeaders.join(',')}
-Billal Hossain,Computer Science and Technology,652750,1502201668,2021-2022,1st
-`
+const shouldShowPdfPreview = import.meta.env.DEV
 
 const activePage = ref<PageKey>('imports')
 const searchTerm = ref('')
@@ -91,6 +56,8 @@ const previewingStudentKey = ref('')
 const previewStudent = ref<StudentTableRow | null>(null)
 const previewPdfUrl = ref('')
 const previewFrame = ref<HTMLIFrameElement | null>(null)
+const printPdfUrl = ref('')
+const printFrame = ref<HTMLIFrameElement | null>(null)
 let saveStatusTimer: number | undefined
 let clearanceStatusTimer: number | undefined
 
@@ -159,6 +126,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearPdfPreview()
+  clearPrintPdf()
 })
 
 async function loadCsvImports() {
@@ -387,8 +355,15 @@ async function previewStudentClearance(student: StudentTableRow) {
 
   try {
     clearPdfPreview()
-    previewPdfUrl.value = await createClearancePdfUrl(student, clearanceSettings.value)
-    previewStudent.value = student
+    clearPrintPdf()
+    const pdfUrl = await createClearancePdfUrl(student, clearanceSettings.value)
+
+    if (shouldShowPdfPreview) {
+      previewPdfUrl.value = pdfUrl
+      previewStudent.value = student
+    } else {
+      printPdfUrl.value = pdfUrl
+    }
   } catch (error) {
     console.error('Clearance PDF preview failed.', error)
     showSaveStatus({
@@ -402,6 +377,17 @@ async function previewStudentClearance(student: StudentTableRow) {
   }
 }
 
+function printStudentClearance() {
+  const frameWindow = printFrame.value?.contentWindow
+
+  if (!frameWindow) {
+    return
+  }
+
+  frameWindow.focus()
+  frameWindow.print()
+}
+
 function clearPdfPreview() {
   if (previewPdfUrl.value) {
     URL.revokeObjectURL(previewPdfUrl.value)
@@ -409,6 +395,14 @@ function clearPdfPreview() {
 
   previewPdfUrl.value = ''
   previewStudent.value = null
+}
+
+function clearPrintPdf() {
+  if (printPdfUrl.value) {
+    URL.revokeObjectURL(printPdfUrl.value)
+  }
+
+  printPdfUrl.value = ''
 }
 
 function downloadPreviewPdf() {
@@ -523,182 +517,14 @@ async function saveStudent(student: StudentTableRow) {
   }
 }
 
-function parseStudentCsv(csvText: string): { students: Student[] } | { error: string } {
-  const rows = parseCsvRows(csvText.trim())
-
-  if (rows.length < 2) {
-    return { error: 'The CSV must include the header row and at least one student row.' }
-  }
-
-  const headers = rows[0].map((header) => header.trim().toLowerCase())
-  const normalizedRequiredHeaders = requiredHeaders.map((header) => header.toLowerCase())
-
-  if (headers.join(',') !== normalizedRequiredHeaders.join(',')) {
-    return {
-      error: `Wrong CSV format. Required header: ${requiredHeaders.join(',')}`,
-    }
-  }
-
-  const seenRolls = new Set<string>()
-  const parsedStudents: Student[] = []
-
-  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const row = rows[rowIndex]
-
-    if (row.every((cell) => cell.trim() === '')) {
-      continue
-    }
-
-    if (row.length !== requiredHeaders.length) {
-      return { error: `Row ${rowIndex + 1} has ${row.length} columns. It must have 6 columns.` }
-    }
-
-    const [name, technology, roll, registrationNo, session, shift] = row.map((cell) =>
-      cell.trim(),
-    )
-
-    if (!name || !technology || !roll || !registrationNo || !session || !shift) {
-      return {
-        error: `Row ${rowIndex + 1} is missing required data. Name, technology, roll, registrationNo, session, and shift are required.`,
-      }
-    }
-
-    if (seenRolls.has(roll)) {
-      return { error: `Duplicate roll found in this CSV: ${roll}` }
-    }
-
-    seenRolls.add(roll)
-    parsedStudents.push({ name, technology, roll, registrationNo, session, shift })
-  }
-
-  if (parsedStudents.length === 0) {
-    return { error: 'No student rows were found in the CSV file.' }
-  }
-
-  return { students: parsedStudents }
-}
-
-function normalizeStudent(student: Student): Student {
-  return {
-    name: student.name.trim(),
-    technology: student.technology.trim(),
-    roll: student.roll.trim(),
-    registrationNo: student.registrationNo.trim(),
-    session: student.session.trim(),
-    shift: student.shift.trim(),
-  }
-}
-
-function createStudentCsv(studentsToWrite: Student[]) {
-  const rows = [
-    requiredHeaders,
-    ...studentsToWrite.map((student) => [
-      student.name,
-      student.technology,
-      student.roll,
-      student.registrationNo,
-      student.session,
-      student.shift,
-    ]),
-  ]
-
-  return `${rows.map((row) => row.map(formatCsvCell).join(',')).join('\n')}\n`
-}
-
-function formatCsvCell(value: string) {
-  if (!/[",\r\n]/.test(value)) {
-    return value
-  }
-
-  return `"${value.replace(/"/g, '""')}"`
-}
-
-function parseCsvRows(csvText: string) {
-  const rows: string[][] = []
-  let currentCell = ''
-  let currentRow: string[] = []
-  let insideQuotes = false
-
-  for (let index = 0; index < csvText.length; index += 1) {
-    const character = csvText[index]
-    const nextCharacter = csvText[index + 1]
-
-    if (character === '"' && nextCharacter === '"') {
-      currentCell += '"'
-      index += 1
-      continue
-    }
-
-    if (character === '"') {
-      insideQuotes = !insideQuotes
-      continue
-    }
-
-    if (character === ',' && !insideQuotes) {
-      currentRow.push(currentCell)
-      currentCell = ''
-      continue
-    }
-
-    if ((character === '\n' || character === '\r') && !insideQuotes) {
-      if (character === '\r' && nextCharacter === '\n') {
-        index += 1
-      }
-
-      currentRow.push(currentCell)
-      rows.push(currentRow)
-      currentCell = ''
-      currentRow = []
-      continue
-    }
-
-    currentCell += character
-  }
-
-  currentRow.push(currentCell)
-  rows.push(currentRow)
-
-  return rows
-}
 </script>
 
 <template>
   <main class="admin-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <img class="brand-logo" src="/gai-logo.svg" alt="Govt. Graphic Arts Institute logo" />
-        <div>
-          <strong>Graphic Arts Institute</strong>
-          <small>Clearance management</small>
-        </div>
-      </div>
-
-      <nav class="nav-list" aria-label="Admin pages">
-        <button
-          v-for="page in pages"
-          :key="page.key"
-          class="nav-item"
-          :class="{ active: activePage === page.key }"
-          type="button"
-          @click="activePage = page.key"
-        >
-          <span>{{ page.label }}</span>
-        </button>
-      </nav>
-    </aside>
+    <AppSidebar v-model:active-page="activePage" :pages="pages" />
 
     <section class="workspace">
-      <header class="topbar">
-        <div>
-          <div class="topbar-brand">
-            <img src="/gai-logo.svg" alt="" aria-hidden="true" />
-            <p class="eyebrow">Govt. Graphic Arts Institute</p>
-          </div>
-          <h1>{{ currentPage.label }}</h1>
-          <p>{{ currentPage.description }}</p>
-        </div>
-        <button class="secondary-action" type="button" @click="loadCsvImports">Refresh</button>
-      </header>
+      <AppTopbar :page="currentPage" @refresh="loadCsvImports" />
 
       <section v-if="activePage === 'imports'" class="imports-layout">
         <div class="panel upload-panel">
@@ -780,14 +606,7 @@ function parseCsvRows(csvText: string) {
           <input v-model="searchTerm" type="search" placeholder="Search students" />
         </div>
 
-        <div v-if="saveStatus" class="notice dismissible-notice" :class="saveStatus.status">
-          <div>
-            <strong>{{ saveStatus.fileName }}</strong>
-            <span>{{ saveStatus.message }}</span>
-            <small v-if="saveStatus.detail">{{ saveStatus.detail }}</small>
-          </div>
-          <button type="button" aria-label="Close notification" @click="clearSaveStatus">x</button>
-        </div>
+        <NoticeMessage v-if="saveStatus" :notice="saveStatus" @close="clearSaveStatus" />
 
         <div v-if="filteredStudents.length" class="table-wrap">
           <table>
@@ -865,7 +684,7 @@ function parseCsvRows(csvText: string) {
                       :disabled="previewingStudentKey === getStudentKey(student)"
                       @click="previewStudentClearance(student)"
                     >
-                      {{ previewingStudentKey === getStudentKey(student) ? 'Preparing' : 'Preview' }}
+                      {{ previewingStudentKey === getStudentKey(student) ? 'Preparing' : shouldShowPdfPreview ? 'Preview' : 'Print' }}
                     </button>
                     <button
                       class="primary-action compact"
@@ -890,7 +709,7 @@ function parseCsvRows(csvText: string) {
           </button>
         </div>
 
-        <div v-if="previewPdfUrl && previewStudent" class="pdf-preview">
+        <div v-if="shouldShowPdfPreview && previewPdfUrl && previewStudent" class="pdf-preview">
           <div class="pdf-preview-header">
             <div>
               <h2>Clearance Preview</h2>
@@ -915,6 +734,14 @@ function parseCsvRows(csvText: string) {
             title="Clearance PDF preview"
           />
         </div>
+        <iframe
+          v-if="!shouldShowPdfPreview && printPdfUrl"
+          ref="printFrame"
+          class="print-frame"
+          :src="printPdfUrl"
+          title="Clearance PDF print"
+          @load="printStudentClearance"
+        />
       </section>
 
       <section v-else-if="activePage === 'clearance'" class="clearance-layout">
@@ -934,14 +761,11 @@ function parseCsvRows(csvText: string) {
             </div>
           </div>
 
-          <div v-if="clearanceStatus" class="notice dismissible-notice" :class="clearanceStatus.status">
-            <div>
-              <strong>{{ clearanceStatus.fileName }}</strong>
-              <span>{{ clearanceStatus.message }}</span>
-              <small v-if="clearanceStatus.detail">{{ clearanceStatus.detail }}</small>
-            </div>
-            <button type="button" aria-label="Close notification" @click="clearClearanceStatus">x</button>
-          </div>
+          <NoticeMessage
+            v-if="clearanceStatus"
+            :notice="clearanceStatus"
+            @close="clearClearanceStatus"
+          />
 
           <form class="clearance-form" @submit.prevent="saveClearanceOptions">
             <label>

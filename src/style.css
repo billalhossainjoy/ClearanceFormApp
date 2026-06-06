@@ -506,6 +506,15 @@ textarea {
   background: #f8fafc;
 }
 
+.print-frame {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
