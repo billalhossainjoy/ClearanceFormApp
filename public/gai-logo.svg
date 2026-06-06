@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Govt. Graphic Arts Institute logo">
+  <defs>
+    <style>
+      .blue { fill: #0796cf; }
+      .ink { fill: #202329; }
+      .white { fill: #ffffff; }
+      .mint { fill: #11b668; }
+      .pink { fill: #ec0a8c; }
+    </style>
+    <path id="topText" d="M113 257a143 143 0 0 1 286 0" />
+    <path id="bottomText" d="M347 390a143 143 0 0 1-182 0" />
+  </defs>
+
+  <g transform="translate(256 256)">
+    <g class="blue">
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(0)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(30)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(60)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(90)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(120)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(150)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(180)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(210)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(240)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(270)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(300)" />
+      <rect x="-24" y="-244" width="48" height="72" transform="rotate(330)" />
+    </g>
+  </g>
+
+  <circle class="blue" cx="256" cy="256" r="181" />
+  <circle class="white" cx="256" cy="256" r="163" />
+  <circle class="blue" cx="256" cy="256" r="97" />
+  <circle class="white" cx="256" cy="256" r="88" />
+
+  <path class="blue" d="M256 168h88a88 88 0 0 1 0 88h-88z" />
+  <path fill="#dff5fb" d="M168 168h88v88h-88z" />
+  <path class="white" d="M168 256h176v88H168z" />
+
+  <g fill="#55c5e7">
+    <circle cx="188" cy="188" r="9" />
+    <circle cx="214" cy="188" r="9" />
+    <circle cx="240" cy="188" r="9" />
+    <circle cx="188" cy="214" r="9" />
+    <circle cx="214" cy="214" r="9" />
+    <circle cx="240" cy="214" r="9" />
+    <circle cx="188" cy="240" r="9" />
+    <circle cx="214" cy="240" r="9" />
+    <circle cx="240" cy="240" r="9" />
+  </g>
+  <path class="blue" d="M255 168h7v88h-7z" />
+  <path class="blue" d="M168 254h176v4H168z" />
+
+  <g transform="translate(300 192)">
+    <path fill="#78cdf0" d="M18 17h47a10 10 0 0 1 10 10v45H28a10 10 0 0 1-10-10z" />
+    <path fill="#1d8fc7" d="M6 27h49a10 10 0 0 1 10 10v41H16A10 10 0 0 1 6 68z" />
+    <path class="white" d="M25 27h31v27H25z" />
+    <path fill="#f6a323" d="M41 33l5 11 11-7-7 11 12 4-13 2 5 12-10-8-8 9 3-13-12-2 12-4-6-11z" />
+    <path fill="#78cdf0" d="M20 82h52v8H20zM31 94h32v6H31z" />
+    <path fill="#1d8fc7" d="M6 102h76v7H6z" />
+  </g>
+
+  <g transform="translate(194 325)">
+    <circle class="pink" cx="45" cy="31" r="31" />
+    <circle class="white" cx="45" cy="31" r="8" />
+    <path class="mint" d="M5 25a42 42 0 0 1 81 0h-5a37 37 0 0 0-71 0z" />
+  </g>
+  <g transform="translate(281 345)">
+    <circle class="ink" cx="22" cy="22" r="19" />
+    <circle class="white" cx="22" cy="22" r="7" />
+    <path class="mint" d="M2 20a22 22 0 1 1 0 5h4a18 18 0 1 0 0-5z" />
+  </g>
+
+  <circle class="ink" cx="114" cy="333" r="14" />
+  <circle class="ink" cx="398" cy="333" r="14" />
+
+  <text class="ink" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" letter-spacing="0">
+    <textPath href="#topText" startOffset="50%" text-anchor="middle">GOVT. GRAPHIC ARTS INSTITUTE</textPath>
+  </text>
+  <text class="ink" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="0">
+    <textPath href="#bottomText" startOffset="50%" text-anchor="middle">ESTD. 1967</textPath>
+  </text>
+</svg>
