@@ -4,14 +4,19 @@ import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
 import NoticeMessage from './components/NoticeMessage.vue'
 import {
+  clearanceShifts,
+  clearanceSignatureKeys,
+  createEmptyClearanceRowSignatures,
   createClearancePdfUrl,
   defaultClearanceRows,
   defaultClearanceSettings,
   downloadClearancePdf,
   loadClearanceSettings,
   saveClearanceSettings as persistClearanceSettings,
+  type ClearanceSignatureKey,
   type ClearanceRow,
   type ClearanceSettings,
+  type ClearanceShift,
 } from './clearancePdf'
 import {
   createStudentCsv,
@@ -32,7 +37,6 @@ import type {
   StudentTableRow,
 } from './types'
 
-const signatureKeys = ['sign1', 'sign2', 'sign3'] as const
 const footerSignatureOptions = [
   { key: 'accountantSignature', label: 'Accountant' },
   { key: 'registrarSignature', label: 'Registrar' },
@@ -50,6 +54,7 @@ const editingStudentKey = ref('')
 const editingStudent = ref<Student | null>(null)
 const saveStatus = ref<CsvFileNotice | null>(null)
 const clearanceSettings = ref<ClearanceSettings>(loadClearanceSettings())
+const selectedClearanceShift = ref<ClearanceShift>('1st')
 const clearanceStatus = ref<CsvFileNotice | null>(null)
 const downloadingStudentKey = ref('')
 const previewingStudentKey = ref('')
@@ -267,9 +272,7 @@ function addClearanceRow() {
     id: `row-${Date.now()}`,
     serial: `${nextIndex}`,
     department: '',
-    sign1: '',
-    sign2: '',
-    sign3: '',
+    signatures: createEmptyClearanceRowSignatures(),
   })
 }
 
@@ -282,7 +285,7 @@ function removeClearanceRow(row: ClearanceRow) {
 async function uploadSignature(
   event: Event,
   target: ClearanceRow | 'accountantSignature' | 'registrarSignature' | 'principalSignature' | 'treasurerSignature',
-  signatureKey?: 'sign1' | 'sign2' | 'sign3',
+  signatureKey?: ClearanceSignatureKey,
 ) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -306,7 +309,7 @@ async function uploadSignature(
   if (typeof target === 'string') {
     clearanceSettings.value[target] = dataUrl
   } else if (signatureKey) {
-    target[signatureKey] = dataUrl
+    target.signatures[selectedClearanceShift.value][signatureKey] = dataUrl
   }
 
   input.value = ''
@@ -314,7 +317,7 @@ async function uploadSignature(
 
 function clearSignature(
   target: ClearanceRow | 'accountantSignature' | 'registrarSignature' | 'principalSignature' | 'treasurerSignature',
-  signatureKey?: 'sign1' | 'sign2' | 'sign3',
+  signatureKey?: ClearanceSignatureKey,
 ) {
   if (typeof target === 'string') {
     clearanceSettings.value[target] = ''
@@ -322,7 +325,7 @@ function clearSignature(
   }
 
   if (signatureKey) {
-    target[signatureKey] = ''
+    target.signatures[selectedClearanceShift.value][signatureKey] = ''
   }
 }
 
@@ -797,6 +800,14 @@ async function saveStudent(student: StudentTableRow) {
               <h2>Department Rows</h2>
               <p>Add the rows and signatures that should appear in the clearance table.</p>
             </div>
+            <label class="shift-selector">
+              Shift Signatures
+              <select v-model="selectedClearanceShift">
+                <option v-for="shift in clearanceShifts" :key="shift" :value="shift">
+                  {{ shift }} shift
+                </option>
+              </select>
+            </label>
             <div class="button-group">
               <button class="secondary-action" type="button" @click="restoreDefaultClearanceRows">
                 Default Rows
@@ -824,9 +835,13 @@ async function saveStudent(student: StudentTableRow) {
               </div>
 
               <div class="signature-grid">
-                <div v-for="signatureKey in signatureKeys" :key="signatureKey" class="signature-slot">
-                  <span>{{ signatureKey === 'sign1' ? 'Signature 1' : signatureKey === 'sign2' ? 'Signature 2' : 'Signature 3' }}</span>
-                  <img v-if="row[signatureKey]" :src="row[signatureKey]" alt="" />
+                <div v-for="signatureKey in clearanceSignatureKeys" :key="signatureKey" class="signature-slot">
+                  <span>{{ selectedClearanceShift }} shift - {{ signatureKey === 'sign1' ? 'Signature 1' : signatureKey === 'sign2' ? 'Signature 2' : 'Signature 3' }}</span>
+                  <img
+                    v-if="row.signatures[selectedClearanceShift][signatureKey]"
+                    :src="row.signatures[selectedClearanceShift][signatureKey]"
+                    alt=""
+                  />
                   <small v-else>No signature</small>
                   <div class="signature-actions">
                     <label class="file-action">

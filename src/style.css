@@ -566,6 +566,7 @@ th {
 
 .student-form label,
 .clearance-form label,
+.shift-selector,
 .row-fields label {
   display: grid;
   gap: 8px;
@@ -598,6 +599,10 @@ th {
   grid-template-columns: minmax(90px, 120px) minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
+}
+
+.shift-selector {
+  min-width: 160px;
 }
 
 .signature-grid,

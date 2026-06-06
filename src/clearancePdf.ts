@@ -6,9 +6,7 @@ export type ClearanceRow = {
   id: string
   serial: string
   department: string
-  sign1: string
-  sign2: string
-  sign3: string
+  signatures: ClearanceRowSignatures
 }
 
 export type ClearanceSettings = {
@@ -24,6 +22,11 @@ export type ClearanceSettings = {
   treasurerSignature: string
 }
 
+export type ClearanceShift = '1st' | '2nd'
+export type ClearanceSignatureKey = 'sign1' | 'sign2' | 'sign3'
+export type ClearanceShiftSignatures = Record<ClearanceSignatureKey, string>
+export type ClearanceRowSignatures = Record<ClearanceShift, ClearanceShiftSignatures>
+
 type ClearanceTableRow = {
   serial: string
   depertment: string
@@ -33,15 +36,15 @@ type ClearanceTableRow = {
 }
 
 export const clearanceStorageKey = 'gai-clearance-settings-v1'
-const clearanceDefaultsVersion = 2
+export const clearanceShifts = ['1st', '2nd'] as const
+export const clearanceSignatureKeys = ['sign1', 'sign2', 'sign3'] as const
+const clearanceDefaultsVersion = 3
 
 export const defaultClearanceRows: ClearanceRow[] = depertmentDataOptions.map((row, index) => ({
   id: `row-${index + 1}`,
   serial: row.id,
   department: row.depertment,
-  sign1: '',
-  sign2: '',
-  sign3: '',
+  signatures: createEmptyClearanceRowSignatures(),
 }))
 
 export const defaultClearanceSettings: ClearanceSettings = {
@@ -61,6 +64,8 @@ export const defaultClearanceSettings: ClearanceSettings = {
 type StoredClearanceSettings = Partial<ClearanceSettings> & {
   defaultsVersion?: number
 }
+
+type StoredClearanceRow = Partial<ClearanceRow> & Partial<ClearanceShiftSignatures>
 
 let fontRegistered = false
 let rendererReady: Promise<{ pdf: any }> | null = null
@@ -239,7 +244,7 @@ export function loadClearanceSettings(): ClearanceSettings {
     }
 
     const parsedSettings = JSON.parse(rawSettings) as StoredClearanceSettings
-    const savedRows = parsedSettings.rows ?? []
+    const savedRows = (parsedSettings.rows ?? []) as StoredClearanceRow[]
 
     if (parsedSettings.defaultsVersion !== clearanceDefaultsVersion) {
       const migratedSettings = {
@@ -266,14 +271,7 @@ export function loadClearanceSettings(): ClearanceSettings {
         ? defaultClearanceSettings.notice
         : parsedSettings.notice || defaultClearanceSettings.notice,
       rows: savedRows.length >= defaultClearanceRows.length
-        ? savedRows.map((row, index) => ({
-          id: row.id || `row-${index + 1}`,
-          serial: row.serial || `${index + 1}`,
-          department: row.department || '',
-          sign1: row.sign1 || '',
-          sign2: row.sign2 || '',
-          sign3: row.sign3 || '',
-        }))
+        ? savedRows.map((row, index) => normalizeClearanceRow(row, index))
         : structuredClone(defaultClearanceRows),
     }
   } catch {
@@ -295,15 +293,51 @@ function createDefaultClearanceSettings(): ClearanceSettings {
   return structuredClone(defaultClearanceSettings)
 }
 
-function mergeDefaultRowsWithSavedSignatures(savedRows: ClearanceRow[]) {
+export function createEmptyClearanceRowSignatures(): ClearanceRowSignatures {
+  return {
+    '1st': { sign1: '', sign2: '', sign3: '' },
+    '2nd': { sign1: '', sign2: '', sign3: '' },
+  }
+}
+
+function normalizeClearanceRow(row: StoredClearanceRow, index: number): ClearanceRow {
+  return {
+    id: row.id || `row-${index + 1}`,
+    serial: row.serial || `${index + 1}`,
+    department: row.department || '',
+    signatures: normalizeClearanceRowSignatures(row),
+  }
+}
+
+function normalizeClearanceRowSignatures(row?: StoredClearanceRow): ClearanceRowSignatures {
+  const signatures = createEmptyClearanceRowSignatures()
+
+  if (!row) {
+    return signatures
+  }
+
+  for (const shift of clearanceShifts) {
+    for (const key of clearanceSignatureKeys) {
+      signatures[shift][key] = row.signatures?.[shift]?.[key] || ''
+    }
+  }
+
+  if (!row.signatures) {
+    signatures['1st'].sign1 = row.sign1 || ''
+    signatures['1st'].sign2 = row.sign2 || ''
+    signatures['1st'].sign3 = row.sign3 || ''
+  }
+
+  return signatures
+}
+
+function mergeDefaultRowsWithSavedSignatures(savedRows: StoredClearanceRow[]) {
   return defaultClearanceRows.map((defaultRow) => {
     const savedRow = savedRows.find((row) => row.id === defaultRow.id)
 
     return {
       ...defaultRow,
-      sign1: savedRow?.sign1 || '',
-      sign2: savedRow?.sign2 || '',
-      sign3: savedRow?.sign3 || '',
+      signatures: normalizeClearanceRowSignatures(savedRow),
     }
   })
 }
@@ -361,13 +395,18 @@ async function ensurePdfRenderer() {
 
 function createClearanceDocument(student: Student, settings: ClearanceSettings) {
   const fullUrl = settings.verifyUrl || `Verify:${window.location.origin}${location.pathname}${location.search}`
-  const tableData = settings.rows.map<ClearanceTableRow>((row) => ({
-    serial: row.serial,
-    depertment: row.department,
-    sign1: row.sign1 || null,
-    sign2: row.sign2 || null,
-    sign3: row.sign3 || null,
-  }))
+  const studentShift = getClearanceShift(student.shift)
+  const tableData = settings.rows.map<ClearanceTableRow>((row) => {
+    const signatures = row.signatures?.[studentShift] ?? createEmptyClearanceRowSignatures()[studentShift]
+
+    return {
+      serial: row.serial,
+      depertment: row.department,
+      sign1: signatures.sign1 || null,
+      sign2: signatures.sign2 || null,
+      sign3: signatures.sign3 || null,
+    }
+  })
 
   return h(
     Document,
@@ -475,6 +514,10 @@ function createClearanceDocument(student: Student, settings: ClearanceSettings) 
       ),
     ),
   )
+}
+
+function getClearanceShift(shift: string): ClearanceShift {
+  return shift.trim().toLowerCase().includes('2') ? '2nd' : '1st'
 }
 
 function createDepartmentRow(row: ClearanceTableRow) {
