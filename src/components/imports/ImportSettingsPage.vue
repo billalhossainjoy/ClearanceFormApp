@@ -12,6 +12,7 @@ defineProps<{
 const emit = defineEmits<{
   downloadTemplate: []
   selectFolder: []
+  selectSignatureFolder: []
   openImagesFolder: []
   refresh: []
 }>()
@@ -55,15 +56,18 @@ const emit = defineEmits<{
           :disabled="!appDataPaths"
           @click="emit('openImagesFolder')"
         >
-          Open Images Folder
+          Open Signature Folder
+        </button>
+        <button class="primary-action" type="button" @click="emit('selectSignatureFolder')">
+          Change Signature Folder
         </button>
       </div>
 
       <div class="folder-source">
         <span>Signature images folder</span>
-        <strong v-if="appDataPaths">{{ appDataPaths.imageFolderPath }}</strong>
+        <strong v-if="appDataPaths">{{ appDataPaths.signatureFolderPath }}</strong>
         <strong v-else>Loading app storage location</strong>
-        <small>Back up this folder when moving the software to another computer.</small>
+        <small>New uploaded signature images are saved here.</small>
       </div>
 
       <div class="folder-source">

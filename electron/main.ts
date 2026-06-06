@@ -46,6 +46,12 @@ type CsvFolderSettings = {
   folderPath: string
 }
 
+type AppLocationSettings = {
+  csvFolderPath: string
+  signatureFolderPath: string
+  firstRunSetupCompleted: boolean
+}
+
 type SaveCsvFileRequest = {
   filePath: string
   csvText: string
@@ -61,6 +67,10 @@ type DeleteSignatureImageRequest = {
 }
 
 function getSettingsPath() {
+  return path.join(app.getPath('userData'), 'app-settings.json')
+}
+
+function getLegacyCsvSettingsPath() {
   return path.join(app.getPath('userData'), 'csv-settings.json')
 }
 
@@ -68,25 +78,86 @@ function getImageFolderPath() {
   return path.join(app.getPath('userData'), 'images')
 }
 
-function getSignatureFolderPath() {
+function getDefaultSignatureFolderPath() {
   return path.join(getImageFolderPath(), 'signatures')
 }
 
-async function ensureAppDataFolders() {
-  await fs.mkdir(getSignatureFolderPath(), { recursive: true })
-}
-
-async function readCsvSettings(): Promise<CsvFolderSettings> {
-  try {
-    const content = await fs.readFile(getSettingsPath(), 'utf8')
-    return JSON.parse(content) as CsvFolderSettings
-  } catch {
-    return { folderPath: '' }
+function createDefaultAppLocationSettings(): AppLocationSettings {
+  return {
+    csvFolderPath: '',
+    signatureFolderPath: getDefaultSignatureFolderPath(),
+    firstRunSetupCompleted: false,
   }
 }
 
-async function writeCsvSettings(settings: CsvFolderSettings) {
+async function readLegacyCsvFolderPath() {
+  try {
+    const content = await fs.readFile(getLegacyCsvSettingsPath(), 'utf8')
+    const settings = JSON.parse(content) as CsvFolderSettings
+
+    return settings.folderPath || ''
+  } catch {
+    return ''
+  }
+}
+
+async function readAppLocationSettings(): Promise<AppLocationSettings> {
+  const defaults = createDefaultAppLocationSettings()
+
+  try {
+    const content = await fs.readFile(getSettingsPath(), 'utf8')
+    const settings = JSON.parse(content) as Partial<AppLocationSettings>
+
+    return {
+      ...defaults,
+      ...settings,
+      csvFolderPath: settings.csvFolderPath || await readLegacyCsvFolderPath(),
+      signatureFolderPath: settings.signatureFolderPath || defaults.signatureFolderPath,
+      firstRunSetupCompleted: Boolean(settings.firstRunSetupCompleted),
+    }
+  } catch {
+    return {
+      ...defaults,
+      csvFolderPath: await readLegacyCsvFolderPath(),
+    }
+  }
+}
+
+async function writeAppLocationSettings(settings: AppLocationSettings) {
+  await fs.mkdir(app.getPath('userData'), { recursive: true })
   await fs.writeFile(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf8')
+}
+
+async function updateAppLocationSettings(
+  updates: Partial<AppLocationSettings>,
+): Promise<AppLocationSettings> {
+  const settings = {
+    ...await readAppLocationSettings(),
+    ...updates,
+  }
+
+  await writeAppLocationSettings(settings)
+  return settings
+}
+
+async function getSignatureFolderPath() {
+  const settings = await readAppLocationSettings()
+
+  return settings.signatureFolderPath || getDefaultSignatureFolderPath()
+}
+
+async function ensureAppDataFolders() {
+  await fs.mkdir(await getSignatureFolderPath(), { recursive: true })
+}
+
+async function readCsvSettings(): Promise<CsvFolderSettings> {
+  const settings = await readAppLocationSettings()
+
+  return { folderPath: settings.csvFolderPath }
+}
+
+async function writeCsvSettings(settings: CsvFolderSettings) {
+  await updateAppLocationSettings({ csvFolderPath: settings.folderPath })
 }
 
 async function scanCsvFolder(folderPath: string): Promise<StoredCsvImport[]> {
@@ -218,16 +289,38 @@ function getFilePathFromSignatureUrl(fileUrl: string) {
 function registerAppDataHandlers() {
   ipcMain.handle('app-data:get', async () => {
     await ensureAppDataFolders()
+    const signatureFolderPath = await getSignatureFolderPath()
 
     return {
       userDataPath: app.getPath('userData'),
       imageFolderPath: getImageFolderPath(),
+      signatureFolderPath,
     }
   })
 
   ipcMain.handle('app-data:open-images-folder', async () => {
     await ensureAppDataFolders()
-    await shell.openPath(getImageFolderPath())
+    await shell.openPath(await getSignatureFolderPath())
+  })
+
+  ipcMain.handle('app-data:select-signature-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select signature images folder',
+    })
+
+    if (!result.canceled && result.filePaths[0]) {
+      await updateAppLocationSettings({ signatureFolderPath: result.filePaths[0] })
+      await ensureAppDataFolders()
+    }
+
+    const signatureFolderPath = await getSignatureFolderPath()
+
+    return {
+      userDataPath: app.getPath('userData'),
+      imageFolderPath: getImageFolderPath(),
+      signatureFolderPath,
+    }
   })
 
   ipcMain.handle('signature-image:save', async (_event, request: SaveSignatureImageRequest) => {
@@ -236,7 +329,7 @@ function registerAppDataHandlers() {
     const image = parseImageDataUrl(request.dataUrl)
     const extension = getImageExtension(request.originalName, image.mimeType)
     const fileName = `signature-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`
-    const filePath = path.join(getSignatureFolderPath(), fileName)
+    const filePath = path.join(await getSignatureFolderPath(), fileName)
 
     await fs.writeFile(filePath, image.content)
 
@@ -250,8 +343,15 @@ function registerAppDataHandlers() {
     await ensureAppDataFolders()
 
     const filePath = getFilePathFromSignatureUrl(request.fileUrl)
+    const signatureFolderPath = await getSignatureFolderPath()
 
-    if (!filePath || !isPathInsideFolder(filePath, getSignatureFolderPath())) {
+    if (
+      !filePath
+      || (
+        !isPathInsideFolder(filePath, signatureFolderPath)
+        && !isPathInsideFolder(filePath, getDefaultSignatureFolderPath())
+      )
+    ) {
       return { deleted: false }
     }
 
@@ -264,9 +364,57 @@ function registerAppDataHandlers() {
   })
 }
 
+async function promptForFolder(title: string, message: string) {
+  const choice = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Select Folder', 'Skip'],
+    defaultId: 0,
+    cancelId: 1,
+    title,
+    message,
+  })
+
+  if (choice.response !== 0) {
+    return ''
+  }
+
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title,
+  })
+
+  return result.canceled ? '' : result.filePaths[0] || ''
+}
+
+async function runFirstLaunchFolderSetup() {
+  const settings = await readAppLocationSettings()
+
+  if (settings.firstRunSetupCompleted) {
+    return
+  }
+
+  const csvFolderPath = settings.csvFolderPath || await promptForFolder(
+    'Select CSV folder',
+    'Choose the folder that contains the student CSV files.',
+  )
+  const signatureFolderPath = await promptForFolder(
+    'Select signature folder',
+    'Choose where signature images should be saved.',
+  )
+
+  await writeAppLocationSettings({
+    ...settings,
+    csvFolderPath,
+    signatureFolderPath: signatureFolderPath || settings.signatureFolderPath || getDefaultSignatureFolderPath(),
+    firstRunSetupCompleted: true,
+  })
+  await ensureAppDataFolders()
+}
+
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'gai-logo.png'),
+    fullscreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -303,8 +451,9 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
+  await runFirstLaunchFolderSetup()
   registerAppDataHandlers()
   registerCsvFolderHandlers()
   createWindow()

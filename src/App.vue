@@ -128,6 +128,13 @@ async function openImagesFolder() {
   await window.ipcRenderer.invoke('app-data:open-images-folder')
 }
 
+async function selectSignatureFolder() {
+  try {
+    appDataPaths.value = (await window.ipcRenderer.invoke('app-data:select-signature-folder')) as AppDataPaths
+  } catch {
+  }
+}
+
 async function selectCsvFolder() {
   isLoadingImports.value = true
   clearSaveStatus()
@@ -442,6 +449,7 @@ async function saveStudent(student: StudentTableRow) {
         :required-headers="requiredHeaders"
         @download-template="downloadTemplate"
         @select-folder="selectCsvFolder"
+        @select-signature-folder="selectSignatureFolder"
         @open-images-folder="openImagesFolder"
         @refresh="loadCsvImports"
       />

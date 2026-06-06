@@ -33,6 +33,7 @@ export type CsvFolderState = {
 export type AppDataPaths = {
   userDataPath: string
   imageFolderPath: string
+  signatureFolderPath: string
 }
 
 export type CsvFileNotice = {
