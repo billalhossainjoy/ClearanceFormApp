@@ -4,6 +4,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const APP_DISPLAY_NAME = 'Graphic Arts Institute'
+
+app.setName(APP_DISPLAY_NAME)
 
 // The built directory structure
 //
@@ -66,12 +69,44 @@ type DeleteSignatureImageRequest = {
   fileUrl: string
 }
 
+function getUniquePaths(paths: string[]) {
+  return Array.from(new Set(paths))
+}
+
+function getUserDataPathCandidates() {
+  return getUniquePaths([
+    app.getPath('userData'),
+    path.join(app.getPath('appData'), APP_DISPLAY_NAME),
+    path.join(app.getPath('appData'), 'gai'),
+  ])
+}
+
+async function readFirstExistingTextFile(paths: string[]) {
+  for (const filePath of paths) {
+    try {
+      return await fs.readFile(filePath, 'utf8')
+    } catch {
+      // Continue through known app data locations from older/package-name builds.
+    }
+  }
+
+  return ''
+}
+
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'app-settings.json')
 }
 
-function getLegacyCsvSettingsPath() {
-  return path.join(app.getPath('userData'), 'csv-settings.json')
+function getSettingsPathCandidates() {
+  return getUserDataPathCandidates().map((folderPath) => path.join(folderPath, 'app-settings.json'))
+}
+
+function getLegacyCsvSettingsPathCandidates() {
+  return getUserDataPathCandidates().map((folderPath) => path.join(folderPath, 'csv-settings.json'))
+}
+
+function getInstallerSettingsPathCandidates() {
+  return getUserDataPathCandidates().map((folderPath) => path.join(folderPath, 'installer-settings.ini'))
 }
 
 function getImageFolderPath() {
@@ -92,7 +127,12 @@ function createDefaultAppLocationSettings(): AppLocationSettings {
 
 async function readLegacyCsvFolderPath() {
   try {
-    const content = await fs.readFile(getLegacyCsvSettingsPath(), 'utf8')
+    const content = await readFirstExistingTextFile(getLegacyCsvSettingsPathCandidates())
+
+    if (!content) {
+      return ''
+    }
+
     const settings = JSON.parse(content) as CsvFolderSettings
 
     return settings.folderPath || ''
@@ -101,24 +141,73 @@ async function readLegacyCsvFolderPath() {
   }
 }
 
+async function readInstallerLocationSettings(): Promise<Partial<AppLocationSettings>> {
+  try {
+    const content = await readFirstExistingTextFile(getInstallerSettingsPathCandidates())
+
+    if (!content) {
+      return {}
+    }
+
+    const settings: Partial<AppLocationSettings> = {}
+
+    for (const line of content.split(/\r?\n/)) {
+      const separatorIndex = line.indexOf('=')
+
+      if (separatorIndex === -1) {
+        continue
+      }
+
+      const key = line.slice(0, separatorIndex).trim()
+      const value = line.slice(separatorIndex + 1).trim()
+
+      if (key === 'csvFolderPath') {
+        settings.csvFolderPath = value
+      }
+
+      if (key === 'signatureFolderPath') {
+        settings.signatureFolderPath = value
+      }
+    }
+
+    if (settings.csvFolderPath && settings.signatureFolderPath) {
+      settings.firstRunSetupCompleted = true
+    }
+
+    return settings
+  } catch {
+    return {}
+  }
+}
+
 async function readAppLocationSettings(): Promise<AppLocationSettings> {
   const defaults = createDefaultAppLocationSettings()
+  const installerSettings = await readInstallerLocationSettings()
 
   try {
-    const content = await fs.readFile(getSettingsPath(), 'utf8')
+    const content = await readFirstExistingTextFile(getSettingsPathCandidates())
+
+    if (!content) {
+      throw new Error('No app settings found.')
+    }
+
     const settings = JSON.parse(content) as Partial<AppLocationSettings>
 
     return {
       ...defaults,
+      ...installerSettings,
       ...settings,
-      csvFolderPath: settings.csvFolderPath || await readLegacyCsvFolderPath(),
-      signatureFolderPath: settings.signatureFolderPath || defaults.signatureFolderPath,
-      firstRunSetupCompleted: Boolean(settings.firstRunSetupCompleted),
+      csvFolderPath: settings.csvFolderPath || installerSettings.csvFolderPath || await readLegacyCsvFolderPath(),
+      signatureFolderPath: settings.signatureFolderPath || installerSettings.signatureFolderPath || defaults.signatureFolderPath,
+      firstRunSetupCompleted: Boolean(settings.firstRunSetupCompleted || installerSettings.firstRunSetupCompleted),
     }
   } catch {
     return {
       ...defaults,
-      csvFolderPath: await readLegacyCsvFolderPath(),
+      ...installerSettings,
+      csvFolderPath: installerSettings.csvFolderPath || await readLegacyCsvFolderPath(),
+      signatureFolderPath: installerSettings.signatureFolderPath || defaults.signatureFolderPath,
+      firstRunSetupCompleted: Boolean(installerSettings.firstRunSetupCompleted),
     }
   }
 }
@@ -414,11 +503,11 @@ async function runFirstLaunchFolderSetup() {
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'gai-logo.png'),
-    fullscreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+  win.maximize()
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
