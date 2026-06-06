@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import {
+  createClearancePdfUrl,
+  defaultClearanceRows,
+  defaultClearanceSettings,
+  downloadClearancePdf,
+  loadClearanceSettings,
+  saveClearanceSettings as persistClearanceSettings,
+  type ClearanceRow,
+  type ClearanceSettings,
+  type Student,
+} from './clearancePdf'
 
-type PageKey = 'imports' | 'students'
-
-type Student = {
-  name: string
-  technology: string
-  roll: string
-  registrationNo: string
-  session: string
-  shift: string
-}
+type PageKey = 'imports' | 'students' | 'clearance'
 
 type StoredCsvImport = {
   id: string
@@ -62,6 +64,13 @@ const sessionOptions = Array.from({ length: 9 }, (_, index) => {
 })
 
 const shiftOptions = ['1st', '2nd']
+const signatureKeys = ['sign1', 'sign2', 'sign3'] as const
+const footerSignatureOptions = [
+  { key: 'accountantSignature', label: 'Accountant' },
+  { key: 'registrarSignature', label: 'Registrar' },
+  { key: 'principalSignature', label: 'Principal' },
+  { key: 'treasurerSignature', label: 'Treasurer' },
+] as const
 
 const templateCsv = `${requiredHeaders.join(',')}
 Billal Hossain,Computer Science and Technology,652750,1502201668,2021-2022,1st
@@ -75,7 +84,15 @@ const isLoadingImports = ref(false)
 const editingStudentKey = ref('')
 const editingStudent = ref<Student | null>(null)
 const saveStatus = ref<CsvFileNotice | null>(null)
+const clearanceSettings = ref<ClearanceSettings>(loadClearanceSettings())
+const clearanceStatus = ref<CsvFileNotice | null>(null)
+const downloadingStudentKey = ref('')
+const previewingStudentKey = ref('')
+const previewStudent = ref<StudentTableRow | null>(null)
+const previewPdfUrl = ref('')
+const previewFrame = ref<HTMLIFrameElement | null>(null)
 let saveStatusTimer: number | undefined
+let clearanceStatusTimer: number | undefined
 
 const pages: Array<{
   key: PageKey
@@ -91,6 +108,11 @@ const pages: Array<{
     key: 'imports',
     label: 'Settings',
     description: 'Choose a CSV folder and review valid CSV files from that location.',
+  },
+  {
+    key: 'clearance',
+    label: 'Clearance',
+    description: 'Edit clearance PDF text, department rows, and signature images.',
   },
 ]
 
@@ -133,6 +155,10 @@ const filteredStudents = computed(() => {
 
 onMounted(() => {
   void loadCsvImports()
+})
+
+onUnmounted(() => {
+  clearPdfPreview()
 })
 
 async function loadCsvImports() {
@@ -227,6 +253,207 @@ function clearSaveStatus() {
   }
 
   saveStatus.value = null
+}
+
+function showClearanceStatus(status: CsvFileNotice) {
+  clearClearanceStatus()
+  clearanceStatus.value = status
+  clearanceStatusTimer = window.setTimeout(() => {
+    clearanceStatus.value = null
+    clearanceStatusTimer = undefined
+  }, 5000)
+}
+
+function clearClearanceStatus() {
+  if (clearanceStatusTimer) {
+    window.clearTimeout(clearanceStatusTimer)
+    clearanceStatusTimer = undefined
+  }
+
+  clearanceStatus.value = null
+}
+
+function saveClearanceOptions() {
+  persistClearanceSettings(clearanceSettings.value)
+  showClearanceStatus({
+    fileName: 'Clearance PDF',
+    status: 'success',
+    message: 'Clearance PDF options saved.',
+  })
+}
+
+function resetClearanceOptions() {
+  clearanceSettings.value = structuredClone(defaultClearanceSettings)
+  persistClearanceSettings(clearanceSettings.value)
+  showClearanceStatus({
+    fileName: 'Clearance PDF',
+    status: 'success',
+    message: 'Default clearance PDF options restored.',
+  })
+}
+
+function addClearanceRow() {
+  const nextIndex = clearanceSettings.value.rows.length + 1
+
+  clearanceSettings.value.rows.push({
+    id: `row-${Date.now()}`,
+    serial: `${nextIndex}`,
+    department: '',
+    sign1: '',
+    sign2: '',
+    sign3: '',
+  })
+}
+
+function removeClearanceRow(row: ClearanceRow) {
+  clearanceSettings.value.rows = clearanceSettings.value.rows.filter(
+    (currentRow) => currentRow.id !== row.id,
+  )
+}
+
+async function uploadSignature(
+  event: Event,
+  target: ClearanceRow | 'accountantSignature' | 'registrarSignature' | 'principalSignature' | 'treasurerSignature',
+  signatureKey?: 'sign1' | 'sign2' | 'sign3',
+) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+
+  if (!file) {
+    return
+  }
+
+  if (!['image/png', 'image/jpeg'].includes(file.type)) {
+    showClearanceStatus({
+      fileName: file.name,
+      status: 'error',
+      message: 'Only PNG and JPEG signatures are supported.',
+    })
+    input.value = ''
+    return
+  }
+
+  const dataUrl = await readFileAsDataUrl(file)
+
+  if (typeof target === 'string') {
+    clearanceSettings.value[target] = dataUrl
+  } else if (signatureKey) {
+    target[signatureKey] = dataUrl
+  }
+
+  input.value = ''
+}
+
+function clearSignature(
+  target: ClearanceRow | 'accountantSignature' | 'registrarSignature' | 'principalSignature' | 'treasurerSignature',
+  signatureKey?: 'sign1' | 'sign2' | 'sign3',
+) {
+  if (typeof target === 'string') {
+    clearanceSettings.value[target] = ''
+    return
+  }
+
+  if (signatureKey) {
+    target[signatureKey] = ''
+  }
+}
+
+function restoreDefaultClearanceRows() {
+  clearanceSettings.value.rows = structuredClone(defaultClearanceRows)
+}
+
+async function downloadStudentClearance(student: StudentTableRow) {
+  const studentKey = getStudentKey(student)
+  downloadingStudentKey.value = studentKey
+
+  try {
+    await downloadClearancePdf(student, clearanceSettings.value)
+  } catch (error) {
+    console.error('Clearance PDF generation failed.', error)
+    showSaveStatus({
+      fileName: student.sourceFile,
+      status: 'error',
+      message: getErrorMessage(error),
+      detail: `${student.name} (${student.roll})`,
+    })
+  } finally {
+    downloadingStudentKey.value = ''
+  }
+}
+
+async function previewStudentClearance(student: StudentTableRow) {
+  const studentKey = getStudentKey(student)
+  previewingStudentKey.value = studentKey
+
+  try {
+    clearPdfPreview()
+    previewPdfUrl.value = await createClearancePdfUrl(student, clearanceSettings.value)
+    previewStudent.value = student
+  } catch (error) {
+    console.error('Clearance PDF preview failed.', error)
+    showSaveStatus({
+      fileName: student.sourceFile,
+      status: 'error',
+      message: getErrorMessage(error),
+      detail: `${student.name} (${student.roll})`,
+    })
+  } finally {
+    previewingStudentKey.value = ''
+  }
+}
+
+function clearPdfPreview() {
+  if (previewPdfUrl.value) {
+    URL.revokeObjectURL(previewPdfUrl.value)
+  }
+
+  previewPdfUrl.value = ''
+  previewStudent.value = null
+}
+
+function downloadPreviewPdf() {
+  if (!previewPdfUrl.value || !previewStudent.value) {
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = previewPdfUrl.value
+  link.download = `clearance-form-${previewStudent.value.roll || 'student'}.pdf`
+  link.click()
+}
+
+function printPreviewPdf() {
+  if (!previewPdfUrl.value) {
+    return
+  }
+
+  const frameWindow = previewFrame.value?.contentWindow
+
+  if (frameWindow) {
+    frameWindow.focus()
+    frameWindow.print()
+    return
+  }
+
+  window.open(previewPdfUrl.value, '_blank')?.print()
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return `Clearance PDF could not be generated: ${error.message}`
+  }
+
+  return 'Clearance PDF could not be generated.'
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 async function saveStudent(student: StudentTableRow) {
@@ -628,9 +855,25 @@ function parseCsvRows(csvText: string) {
                   <td>{{ student.session }}</td>
                   <td>{{ student.shift }}</td>
                   <td>{{ student.sourceFile }}</td>
-                  <td>
+                  <td class="action-cell">
                     <button class="secondary-action compact" type="button" @click="startEditingStudent(student)">
                       Edit
+                    </button>
+                    <button
+                      class="secondary-action compact"
+                      type="button"
+                      :disabled="previewingStudentKey === getStudentKey(student)"
+                      @click="previewStudentClearance(student)"
+                    >
+                      {{ previewingStudentKey === getStudentKey(student) ? 'Preparing' : 'Preview' }}
+                    </button>
+                    <button
+                      class="primary-action compact"
+                      type="button"
+                      :disabled="downloadingStudentKey === getStudentKey(student)"
+                      @click="downloadStudentClearance(student)"
+                    >
+                      {{ downloadingStudentKey === getStudentKey(student) ? 'Preparing' : 'Download PDF' }}
                     </button>
                   </td>
                 </template>
@@ -645,6 +888,173 @@ function parseCsvRows(csvText: string) {
           <button class="primary-action" type="button" @click="activePage = 'imports'">
             Open Settings
           </button>
+        </div>
+
+        <div v-if="previewPdfUrl && previewStudent" class="pdf-preview">
+          <div class="pdf-preview-header">
+            <div>
+              <h2>Clearance Preview</h2>
+              <p>{{ previewStudent.name }} ({{ previewStudent.roll }})</p>
+            </div>
+            <div class="button-group">
+              <button class="secondary-action" type="button" @click="printPreviewPdf">
+                Print
+              </button>
+              <button class="primary-action" type="button" @click="downloadPreviewPdf">
+                Download
+              </button>
+              <button class="secondary-action" type="button" @click="clearPdfPreview">
+                Close
+              </button>
+            </div>
+          </div>
+          <iframe
+            ref="previewFrame"
+            class="pdf-frame"
+            :src="previewPdfUrl"
+            title="Clearance PDF preview"
+          />
+        </div>
+      </section>
+
+      <section v-else-if="activePage === 'clearance'" class="clearance-layout">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>PDF Text</h2>
+              <p>These values are printed at the top of every clearance PDF.</p>
+            </div>
+            <div class="button-group">
+              <button class="secondary-action" type="button" @click="resetClearanceOptions">
+                Reset All
+              </button>
+              <button class="primary-action" type="button" @click="saveClearanceOptions">
+                Save Options
+              </button>
+            </div>
+          </div>
+
+          <div v-if="clearanceStatus" class="notice dismissible-notice" :class="clearanceStatus.status">
+            <div>
+              <strong>{{ clearanceStatus.fileName }}</strong>
+              <span>{{ clearanceStatus.message }}</span>
+              <small v-if="clearanceStatus.detail">{{ clearanceStatus.detail }}</small>
+            </div>
+            <button type="button" aria-label="Close notification" @click="clearClearanceStatus">x</button>
+          </div>
+
+          <form class="clearance-form" @submit.prevent="saveClearanceOptions">
+            <label>
+              Verify URL
+              <input v-model="clearanceSettings.verifyUrl" />
+            </label>
+            <label>
+              Institute Name
+              <input v-model="clearanceSettings.instituteName" />
+            </label>
+            <label>
+              PDF Title
+              <input v-model="clearanceSettings.title" />
+            </label>
+            <label>
+              Subtitle
+              <input v-model="clearanceSettings.subtitle" />
+            </label>
+            <label class="full-width">
+              Notice Text
+              <textarea v-model="clearanceSettings.notice" rows="3" />
+            </label>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Department Rows</h2>
+              <p>Add the rows and signatures that should appear in the clearance table.</p>
+            </div>
+            <div class="button-group">
+              <button class="secondary-action" type="button" @click="restoreDefaultClearanceRows">
+                Default Rows
+              </button>
+              <button class="primary-action" type="button" @click="addClearanceRow">
+                Add Row
+              </button>
+            </div>
+          </div>
+
+          <div class="clearance-rows">
+            <article v-for="row in clearanceSettings.rows" :key="row.id" class="clearance-row">
+              <div class="row-fields">
+                <label>
+                  Serial
+                  <input v-model="row.serial" />
+                </label>
+                <label>
+                  Department
+                  <input v-model="row.department" />
+                </label>
+                <button class="danger-action compact" type="button" @click="removeClearanceRow(row)">
+                  Remove
+                </button>
+              </div>
+
+              <div class="signature-grid">
+                <div v-for="signatureKey in signatureKeys" :key="signatureKey" class="signature-slot">
+                  <span>{{ signatureKey === 'sign1' ? 'Signature 1' : signatureKey === 'sign2' ? 'Signature 2' : 'Signature 3' }}</span>
+                  <img v-if="row[signatureKey]" :src="row[signatureKey]" alt="" />
+                  <small v-else>No signature</small>
+                  <div class="signature-actions">
+                    <label class="file-action">
+                      Upload
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        @change="uploadSignature($event, row, signatureKey)"
+                      />
+                    </label>
+                    <button class="secondary-action compact" type="button" @click="clearSignature(row, signatureKey)">
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Bottom Signatures</h2>
+              <p>Upload optional signatures for the footer approval areas.</p>
+            </div>
+          </div>
+
+          <div class="footer-signature-grid">
+            <div
+              v-for="footerSignature in footerSignatureOptions"
+              :key="footerSignature.key"
+              class="signature-slot"
+            >
+              <span>{{ footerSignature.label }}</span>
+              <img v-if="clearanceSettings[footerSignature.key]" :src="clearanceSettings[footerSignature.key]" alt="" />
+              <small v-else>No signature</small>
+              <div class="signature-actions">
+                <label class="file-action">
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    @change="uploadSignature($event, footerSignature.key)"
+                  />
+                </label>
+                <button class="secondary-action compact" type="button" @click="clearSignature(footerSignature.key)">
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </section>

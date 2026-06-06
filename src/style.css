@@ -31,6 +31,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 #app {
   min-height: 100vh;
 }
@@ -210,6 +215,11 @@ h2 {
 }
 
 .imports-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.clearance-layout {
   display: grid;
   gap: 20px;
 }
@@ -463,6 +473,39 @@ textarea {
   max-width: 100%;
 }
 
+.pdf-preview {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  border-top: 1px solid #d8dee8;
+  padding-top: 18px;
+}
+
+.pdf-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pdf-preview-header h2 {
+  margin-bottom: 6px;
+}
+
+.pdf-preview-header p {
+  margin-bottom: 0;
+  color: #64748b;
+}
+
+.pdf-frame {
+  width: 100%;
+  height: min(76vh, 920px);
+  min-height: 620px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -512,11 +555,110 @@ th {
   gap: 16px;
 }
 
-.student-form label {
+.student-form label,
+.clearance-form label,
+.row-fields label {
   display: grid;
   gap: 8px;
   color: #334155;
   font-weight: 700;
+}
+
+.clearance-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.clearance-rows {
+  display: grid;
+  gap: 14px;
+}
+
+.clearance-row {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.row-fields {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.signature-grid,
+.footer-signature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.footer-signature-grid {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.signature-slot {
+  display: grid;
+  gap: 10px;
+  min-height: 136px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.signature-slot span {
+  color: #334155;
+  font-weight: 800;
+}
+
+.signature-slot img {
+  width: 100%;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.signature-slot small {
+  display: grid;
+  height: 42px;
+  place-items: center;
+  border-radius: 6px;
+  color: #64748b;
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.signature-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #334155;
+  background: #e2e8f0;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.file-action input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 .full-width,
@@ -555,6 +697,7 @@ th {
 
   .topbar,
   .panel-heading,
+  .pdf-preview-header,
   .table-header,
   .button-group,
   .action-cell,
@@ -569,7 +712,14 @@ th {
 
   .content-grid,
   .imports-layout,
+  .clearance-form,
+  .signature-grid,
+  .footer-signature-grid,
   .student-form {
+    grid-template-columns: 1fr;
+  }
+
+  .row-fields {
     grid-template-columns: 1fr;
   }
 

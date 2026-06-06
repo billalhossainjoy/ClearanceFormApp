@@ -5,6 +5,12 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      events: 'events',
+      queue: path.resolve(__dirname, 'src/vendor/queue.ts'),
+    },
+  },
   plugins: [
     vue(),
     electron({
