@@ -79,24 +79,51 @@ async function uploadSignature(
   }
 
   const dataUrl = await readFileAsDataUrl(file)
+  const signatureSource = await saveSignatureImage(file.name, dataUrl)
 
   if (typeof target === 'string') {
-    props.settings[target] = dataUrl
+    props.settings[target] = signatureSource
   } else if (signatureKey) {
-    target.signatures[selectedClearanceShift.value][signatureKey] = dataUrl
+    target.signatures[selectedClearanceShift.value][signatureKey] = signatureSource
   }
 
   input.value = ''
 }
 
-function clearSignature(target: ClearanceRow | FooterSignatureKey, signatureKey?: ClearanceSignatureKey) {
+async function clearSignature(target: ClearanceRow | FooterSignatureKey, signatureKey?: ClearanceSignatureKey) {
   if (typeof target === 'string') {
+    await deleteSignatureImage(props.settings[target])
     props.settings[target] = ''
     return
   }
 
   if (signatureKey) {
+    await deleteSignatureImage(target.signatures[selectedClearanceShift.value][signatureKey])
     target.signatures[selectedClearanceShift.value][signatureKey] = ''
+  }
+}
+
+async function deleteSignatureImage(fileUrl: string) {
+  if (!fileUrl.startsWith('file:')) {
+    return
+  }
+
+  try {
+    await window.ipcRenderer.invoke('signature-image:delete', { fileUrl })
+  } catch {
+  }
+}
+
+async function saveSignatureImage(originalName: string, dataUrl: string) {
+  try {
+    const savedImage = (await window.ipcRenderer.invoke('signature-image:save', {
+      originalName,
+      dataUrl,
+    })) as { fileUrl: string }
+
+    return savedImage.fileUrl
+  } catch {
+    return dataUrl
   }
 }
 

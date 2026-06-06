@@ -30,6 +30,11 @@ export type CsvFolderState = {
   files: StoredCsvImport[]
 }
 
+export type AppDataPaths = {
+  userDataPath: string
+  imageFolderPath: string
+}
+
 export type CsvFileNotice = {
   fileName: string
   status: 'success' | 'error'

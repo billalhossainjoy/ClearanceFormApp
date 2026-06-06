@@ -25,6 +25,7 @@ import {
   templateCsv,
 } from './lib/studentCsv'
 import type {
+  AppDataPaths,
   CsvFileNotice,
   CsvFolderState,
   PageKey,
@@ -35,9 +36,10 @@ import type {
 
 const shouldShowPdfPreview = import.meta.env.DEV
 
-const activePage = ref<PageKey>('imports')
+const activePage = ref<PageKey>('students')
 const searchTerm = ref('')
 const selectedFolderPath = ref('')
+const appDataPaths = ref<AppDataPaths | null>(null)
 const csvImports = ref<StoredCsvImport[]>([])
 const isLoadingImports = ref(false)
 const editingStudentKey = ref('')
@@ -93,6 +95,7 @@ const filteredStudents = computed(() => {
 })
 
 onMounted(() => {
+  void loadAppDataPaths()
   void loadCsvImports()
 })
 
@@ -111,6 +114,18 @@ async function loadCsvImports() {
   } finally {
     isLoadingImports.value = false
   }
+}
+
+async function loadAppDataPaths() {
+  try {
+    appDataPaths.value = (await window.ipcRenderer.invoke('app-data:get')) as AppDataPaths
+  } catch {
+    appDataPaths.value = null
+  }
+}
+
+async function openImagesFolder() {
+  await window.ipcRenderer.invoke('app-data:open-images-folder')
 }
 
 async function selectCsvFolder() {
@@ -421,11 +436,13 @@ async function saveStudent(student: StudentTableRow) {
       <ImportSettingsPage
         v-if="activePage === 'imports'"
         :selected-folder-path="selectedFolderPath"
+        :app-data-paths="appDataPaths"
         :csv-imports="csvImports"
         :is-loading-imports="isLoadingImports"
         :required-headers="requiredHeaders"
         @download-template="downloadTemplate"
         @select-folder="selectCsvFolder"
+        @open-images-folder="openImagesFolder"
         @refresh="loadCsvImports"
       />
 

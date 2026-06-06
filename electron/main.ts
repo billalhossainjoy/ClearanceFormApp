@@ -1,6 +1,6 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron'
 import fs from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -51,8 +51,29 @@ type SaveCsvFileRequest = {
   csvText: string
 }
 
+type SaveSignatureImageRequest = {
+  dataUrl: string
+  originalName: string
+}
+
+type DeleteSignatureImageRequest = {
+  fileUrl: string
+}
+
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'csv-settings.json')
+}
+
+function getImageFolderPath() {
+  return path.join(app.getPath('userData'), 'images')
+}
+
+function getSignatureFolderPath() {
+  return path.join(getImageFolderPath(), 'signatures')
+}
+
+async function ensureAppDataFolders() {
+  await fs.mkdir(getSignatureFolderPath(), { recursive: true })
 }
 
 async function readCsvSettings(): Promise<CsvFolderSettings> {
@@ -159,6 +180,90 @@ function registerCsvFolderHandlers() {
   })
 }
 
+function getImageExtension(fileName: string, mimeType: string) {
+  const extension = path.extname(fileName).toLowerCase()
+
+  if (['.png', '.jpg', '.jpeg'].includes(extension)) {
+    return extension
+  }
+
+  return mimeType === 'image/png' ? '.png' : '.jpg'
+}
+
+function parseImageDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpeg));base64,(.+)$/)
+
+  if (!match) {
+    throw new Error('Only PNG and JPEG signatures are supported.')
+  }
+
+  return {
+    mimeType: match[1],
+    content: Buffer.from(match[2], 'base64'),
+  }
+}
+
+function getFilePathFromSignatureUrl(fileUrl: string) {
+  if (!fileUrl.startsWith('file:')) {
+    return ''
+  }
+
+  try {
+    return fileURLToPath(fileUrl)
+  } catch {
+    return ''
+  }
+}
+
+function registerAppDataHandlers() {
+  ipcMain.handle('app-data:get', async () => {
+    await ensureAppDataFolders()
+
+    return {
+      userDataPath: app.getPath('userData'),
+      imageFolderPath: getImageFolderPath(),
+    }
+  })
+
+  ipcMain.handle('app-data:open-images-folder', async () => {
+    await ensureAppDataFolders()
+    await shell.openPath(getImageFolderPath())
+  })
+
+  ipcMain.handle('signature-image:save', async (_event, request: SaveSignatureImageRequest) => {
+    await ensureAppDataFolders()
+
+    const image = parseImageDataUrl(request.dataUrl)
+    const extension = getImageExtension(request.originalName, image.mimeType)
+    const fileName = `signature-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`
+    const filePath = path.join(getSignatureFolderPath(), fileName)
+
+    await fs.writeFile(filePath, image.content)
+
+    return {
+      filePath,
+      fileUrl: pathToFileURL(filePath).toString(),
+    }
+  })
+
+  ipcMain.handle('signature-image:delete', async (_event, request: DeleteSignatureImageRequest) => {
+    await ensureAppDataFolders()
+
+    const filePath = getFilePathFromSignatureUrl(request.fileUrl)
+
+    if (!filePath || !isPathInsideFolder(filePath, getSignatureFolderPath())) {
+      return { deleted: false }
+    }
+
+    try {
+      await fs.unlink(filePath)
+      return { deleted: true }
+    } catch {
+      return { deleted: false }
+    }
+  })
+}
+
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'gai-logo.png'),
@@ -200,6 +305,7 @@ app.on('activate', () => {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
+  registerAppDataHandlers()
   registerCsvFolderHandlers()
   createWindow()
 })

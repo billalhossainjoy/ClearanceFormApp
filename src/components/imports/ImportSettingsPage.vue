@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { StoredCsvImport } from '../../types'
+import type { AppDataPaths, StoredCsvImport } from '../../types'
 
 defineProps<{
   selectedFolderPath: string
+  appDataPaths: AppDataPaths | null
   csvImports: StoredCsvImport[]
   isLoadingImports: boolean
   requiredHeaders: string[]
@@ -11,6 +12,7 @@ defineProps<{
 const emit = defineEmits<{
   downloadTemplate: []
   selectFolder: []
+  openImagesFolder: []
   refresh: []
 }>()
 </script>
@@ -38,6 +40,36 @@ const emit = defineEmits<{
         <strong v-if="selectedFolderPath">{{ selectedFolderPath }}</strong>
         <strong v-else>No folder selected</strong>
         <small>Only valid .csv files are listed. Required header: {{ requiredHeaders.join(', ') }}</small>
+      </div>
+    </div>
+
+    <div class="panel upload-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Application Storage</h2>
+          <p>Signature images and app settings are stored outside the install folder.</p>
+        </div>
+        <button
+          class="secondary-action"
+          type="button"
+          :disabled="!appDataPaths"
+          @click="emit('openImagesFolder')"
+        >
+          Open Images Folder
+        </button>
+      </div>
+
+      <div class="folder-source">
+        <span>Signature images folder</span>
+        <strong v-if="appDataPaths">{{ appDataPaths.imageFolderPath }}</strong>
+        <strong v-else>Loading app storage location</strong>
+        <small>Back up this folder when moving the software to another computer.</small>
+      </div>
+
+      <div class="folder-source">
+        <span>App data folder</span>
+        <strong v-if="appDataPaths">{{ appDataPaths.userDataPath }}</strong>
+        <strong v-else>Loading app data location</strong>
       </div>
     </div>
 

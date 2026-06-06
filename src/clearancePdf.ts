@@ -528,7 +528,7 @@ function createSignatureCell(signature: string | null) {
     h(
       View,
       { style: styles.imageContainer },
-      signature && signature.length > 50 ? h(Image, { src: signature, style: styles.image }) : null,
+      signature ? h(Image, { src: signature, style: styles.image }) : null,
     ),
   )
 }
