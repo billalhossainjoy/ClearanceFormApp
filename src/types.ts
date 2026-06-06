@@ -1,5 +1,11 @@
 export type PageKey = 'imports' | 'students' | 'clearance'
 
+export type PageDefinition = {
+  key: PageKey
+  label: string
+  description: string
+}
+
 export type Student = {
   name: string
   technology: string

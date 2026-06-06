@@ -2,21 +2,17 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
+import ClearanceSettingsPage from './components/clearance/ClearanceSettingsPage.vue'
+import ImportSettingsPage from './components/imports/ImportSettingsPage.vue'
 import NoticeMessage from './components/NoticeMessage.vue'
+import { pages } from './constants/navigation'
 import {
-  clearanceShifts,
-  clearanceSignatureKeys,
-  createEmptyClearanceRowSignatures,
   createClearancePdfUrl,
-  defaultClearanceRows,
   defaultClearanceSettings,
   downloadClearancePdf,
   loadClearanceSettings,
   saveClearanceSettings as persistClearanceSettings,
-  type ClearanceSignatureKey,
-  type ClearanceRow,
   type ClearanceSettings,
-  type ClearanceShift,
 } from './clearancePdf'
 import {
   createStudentCsv,
@@ -37,12 +33,6 @@ import type {
   StudentTableRow,
 } from './types'
 
-const footerSignatureOptions = [
-  { key: 'accountantSignature', label: 'Accountant' },
-  { key: 'registrarSignature', label: 'Registrar' },
-  { key: 'principalSignature', label: 'Principal' },
-  { key: 'treasurerSignature', label: 'Treasurer' },
-] as const
 const shouldShowPdfPreview = import.meta.env.DEV
 
 const activePage = ref<PageKey>('imports')
@@ -54,7 +44,6 @@ const editingStudentKey = ref('')
 const editingStudent = ref<Student | null>(null)
 const saveStatus = ref<CsvFileNotice | null>(null)
 const clearanceSettings = ref<ClearanceSettings>(loadClearanceSettings())
-const selectedClearanceShift = ref<ClearanceShift>('1st')
 const clearanceStatus = ref<CsvFileNotice | null>(null)
 const downloadingStudentKey = ref('')
 const previewingStudentKey = ref('')
@@ -65,28 +54,6 @@ const printPdfUrl = ref('')
 const printFrame = ref<HTMLIFrameElement | null>(null)
 let saveStatusTimer: number | undefined
 let clearanceStatusTimer: number | undefined
-
-const pages: Array<{
-  key: PageKey
-  label: string
-  description: string
-}> = [
-  {
-    key: 'students',
-    label: 'Students',
-    description: 'View and update students directly in their source CSV files.',
-  },
-  {
-    key: 'imports',
-    label: 'Settings',
-    description: 'Choose a CSV folder and review valid CSV files from that location.',
-  },
-  {
-    key: 'clearance',
-    label: 'Clearance',
-    description: 'Edit clearance PDF text, department rows, and signature images.',
-  },
-]
 
 const currentPage = computed(() => pages.find((page) => page.key === activePage.value) ?? pages[0])
 
@@ -265,74 +232,6 @@ function resetClearanceOptions() {
   })
 }
 
-function addClearanceRow() {
-  const nextIndex = clearanceSettings.value.rows.length + 1
-
-  clearanceSettings.value.rows.push({
-    id: `row-${Date.now()}`,
-    serial: `${nextIndex}`,
-    department: '',
-    signatures: createEmptyClearanceRowSignatures(),
-  })
-}
-
-function removeClearanceRow(row: ClearanceRow) {
-  clearanceSettings.value.rows = clearanceSettings.value.rows.filter(
-    (currentRow) => currentRow.id !== row.id,
-  )
-}
-
-async function uploadSignature(
-  event: Event,
-  target: ClearanceRow | 'accountantSignature' | 'registrarSignature' | 'principalSignature' | 'treasurerSignature',
-  signatureKey?: ClearanceSignatureKey,
-) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-
-  if (!file) {
-    return
-  }
-
-  if (!['image/png', 'image/jpeg'].includes(file.type)) {
-    showClearanceStatus({
-      fileName: file.name,
-      status: 'error',
-      message: 'Only PNG and JPEG signatures are supported.',
-    })
-    input.value = ''
-    return
-  }
-
-  const dataUrl = await readFileAsDataUrl(file)
-
-  if (typeof target === 'string') {
-    clearanceSettings.value[target] = dataUrl
-  } else if (signatureKey) {
-    target.signatures[selectedClearanceShift.value][signatureKey] = dataUrl
-  }
-
-  input.value = ''
-}
-
-function clearSignature(
-  target: ClearanceRow | 'accountantSignature' | 'registrarSignature' | 'principalSignature' | 'treasurerSignature',
-  signatureKey?: ClearanceSignatureKey,
-) {
-  if (typeof target === 'string') {
-    clearanceSettings.value[target] = ''
-    return
-  }
-
-  if (signatureKey) {
-    target.signatures[selectedClearanceShift.value][signatureKey] = ''
-  }
-}
-
-function restoreDefaultClearanceRows() {
-  clearanceSettings.value.rows = structuredClone(defaultClearanceRows)
-}
-
 async function downloadStudentClearance(student: StudentTableRow) {
   const studentKey = getStudentKey(student)
   downloadingStudentKey.value = studentKey
@@ -443,16 +342,6 @@ function getErrorMessage(error: unknown) {
   return 'Clearance PDF could not be generated.'
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
 async function saveStudent(student: StudentTableRow) {
   if (!editingStudent.value) {
     return
@@ -529,75 +418,16 @@ async function saveStudent(student: StudentTableRow) {
     <section class="workspace">
       <AppTopbar :page="currentPage" @refresh="loadCsvImports" />
 
-      <section v-if="activePage === 'imports'" class="imports-layout">
-        <div class="panel upload-panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Saved CSV Folder</h2>
-              <p>The app reads every .csv file from this saved folder when it starts.</p>
-            </div>
-            <div class="button-group">
-              <button class="secondary-action" type="button" @click="downloadTemplate">
-                Download Template
-              </button>
-              <button class="primary-action" type="button" @click="selectCsvFolder">
-                Browse Folder
-              </button>
-            </div>
-          </div>
-
-          <div class="folder-source">
-            <span>Selected folder</span>
-            <strong v-if="selectedFolderPath">{{ selectedFolderPath }}</strong>
-            <strong v-else>No folder selected</strong>
-            <small>Only valid .csv files are listed. Required header: {{ requiredHeaders.join(', ') }}</small>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>CSV Files</h2>
-              <p>Only valid CSV files are shown here and available in the Students page.</p>
-            </div>
-            <button class="secondary-action" type="button" @click="loadCsvImports">Refresh</button>
-          </div>
-
-          <div v-if="isLoadingImports" class="empty-state">
-            <h3>Loading CSV files</h3>
-            <p>Reading the selected folder.</p>
-          </div>
-
-          <div v-else-if="csvImports.length" class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>CSV File</th>
-                  <th>Students</th>
-                  <th>Last Updated</th>
-                  <th>Location</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="csvImport in csvImports" :key="csvImport.id">
-                  <td>{{ csvImport.fileName }}</td>
-                  <td>{{ csvImport.rowCount }}</td>
-                  <td>{{ csvImport.updatedAt }}</td>
-                  <td class="path-cell">{{ csvImport.filePath }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div v-else class="empty-state">
-            <h3>No valid CSV files found</h3>
-            <p>Browse for a CSV folder, then add one or more CSV files that match the template.</p>
-            <button class="primary-action" type="button" @click="selectCsvFolder">
-              Browse Folder
-            </button>
-          </div>
-        </div>
-      </section>
+      <ImportSettingsPage
+        v-if="activePage === 'imports'"
+        :selected-folder-path="selectedFolderPath"
+        :csv-imports="csvImports"
+        :is-loading-imports="isLoadingImports"
+        :required-headers="requiredHeaders"
+        @download-template="downloadTemplate"
+        @select-folder="selectCsvFolder"
+        @refresh="loadCsvImports"
+      />
 
       <section v-else-if="activePage === 'students'" class="panel">
         <div class="table-header">
@@ -747,155 +577,14 @@ async function saveStudent(student: StudentTableRow) {
         />
       </section>
 
-      <section v-else-if="activePage === 'clearance'" class="clearance-layout">
-        <div class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>PDF Text</h2>
-              <p>These values are printed at the top of every clearance PDF.</p>
-            </div>
-            <div class="button-group">
-              <button class="secondary-action" type="button" @click="resetClearanceOptions">
-                Reset All
-              </button>
-              <button class="primary-action" type="button" @click="saveClearanceOptions">
-                Save Options
-              </button>
-            </div>
-          </div>
-
-          <NoticeMessage
-            v-if="clearanceStatus"
-            :notice="clearanceStatus"
-            @close="clearClearanceStatus"
-          />
-
-          <form class="clearance-form" @submit.prevent="saveClearanceOptions">
-            <label>
-              Verify URL
-              <input v-model="clearanceSettings.verifyUrl" />
-            </label>
-            <label>
-              Institute Name
-              <input v-model="clearanceSettings.instituteName" />
-            </label>
-            <label>
-              PDF Title
-              <input v-model="clearanceSettings.title" />
-            </label>
-            <label>
-              Subtitle
-              <input v-model="clearanceSettings.subtitle" />
-            </label>
-            <label class="full-width">
-              Notice Text
-              <textarea v-model="clearanceSettings.notice" rows="3" />
-            </label>
-          </form>
-        </div>
-
-        <div class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Department Rows</h2>
-              <p>Add the rows and signatures that should appear in the clearance table.</p>
-            </div>
-            <label class="shift-selector">
-              Shift Signatures
-              <select v-model="selectedClearanceShift">
-                <option v-for="shift in clearanceShifts" :key="shift" :value="shift">
-                  {{ shift }} shift
-                </option>
-              </select>
-            </label>
-            <div class="button-group">
-              <button class="secondary-action" type="button" @click="restoreDefaultClearanceRows">
-                Default Rows
-              </button>
-              <button class="primary-action" type="button" @click="addClearanceRow">
-                Add Row
-              </button>
-            </div>
-          </div>
-
-          <div class="clearance-rows">
-            <article v-for="row in clearanceSettings.rows" :key="row.id" class="clearance-row">
-              <div class="row-fields">
-                <label>
-                  Serial
-                  <input v-model="row.serial" />
-                </label>
-                <label>
-                  Department
-                  <input v-model="row.department" />
-                </label>
-                <button class="danger-action compact" type="button" @click="removeClearanceRow(row)">
-                  Remove
-                </button>
-              </div>
-
-              <div class="signature-grid">
-                <div v-for="signatureKey in clearanceSignatureKeys" :key="signatureKey" class="signature-slot">
-                  <span>{{ selectedClearanceShift }} shift - {{ signatureKey === 'sign1' ? 'Signature 1' : signatureKey === 'sign2' ? 'Signature 2' : 'Signature 3' }}</span>
-                  <img
-                    v-if="row.signatures[selectedClearanceShift][signatureKey]"
-                    :src="row.signatures[selectedClearanceShift][signatureKey]"
-                    alt=""
-                  />
-                  <small v-else>No signature</small>
-                  <div class="signature-actions">
-                    <label class="file-action">
-                      Upload
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg"
-                        @change="uploadSignature($event, row, signatureKey)"
-                      />
-                    </label>
-                    <button class="secondary-action compact" type="button" @click="clearSignature(row, signatureKey)">
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Bottom Signatures</h2>
-              <p>Upload optional signatures for the footer approval areas.</p>
-            </div>
-          </div>
-
-          <div class="footer-signature-grid">
-            <div
-              v-for="footerSignature in footerSignatureOptions"
-              :key="footerSignature.key"
-              class="signature-slot"
-            >
-              <span>{{ footerSignature.label }}</span>
-              <img v-if="clearanceSettings[footerSignature.key]" :src="clearanceSettings[footerSignature.key]" alt="" />
-              <small v-else>No signature</small>
-              <div class="signature-actions">
-                <label class="file-action">
-                  Upload
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    @change="uploadSignature($event, footerSignature.key)"
-                  />
-                </label>
-                <button class="secondary-action compact" type="button" @click="clearSignature(footerSignature.key)">
-                  Clear
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <ClearanceSettingsPage
+        v-else-if="activePage === 'clearance'"
+        :settings="clearanceSettings"
+        :status="clearanceStatus"
+        @save="saveClearanceOptions"
+        @reset="resetClearanceOptions"
+        @clear-status="clearClearanceStatus"
+      />
     </section>
   </main>
 </template>

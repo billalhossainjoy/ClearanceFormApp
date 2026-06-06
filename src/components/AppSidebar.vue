@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import type { PageKey } from '../types'
-
-type PageNavItem = {
-  key: PageKey
-  label: string
-}
+import type { PageDefinition, PageKey } from '../types'
 
 defineProps<{
   activePage: PageKey
-  pages: PageNavItem[]
+  pages: PageDefinition[]
 }>()
 
 const emit = defineEmits<{

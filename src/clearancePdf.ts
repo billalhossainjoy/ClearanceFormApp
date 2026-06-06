@@ -10,7 +10,6 @@ export type ClearanceRow = {
 }
 
 export type ClearanceSettings = {
-  verifyUrl: string
   instituteName: string
   title: string
   subtitle: string
@@ -48,7 +47,6 @@ export const defaultClearanceRows: ClearanceRow[] = depertmentDataOptions.map((r
 }))
 
 export const defaultClearanceSettings: ClearanceSettings = {
-  verifyUrl: '',
   instituteName: 'গ্রাফিক আর্টস ইনস্টিটিউট',
   title: 'দায় মুক্তি ফর্ম',
   subtitle: '',
@@ -81,12 +79,6 @@ const textSize = 10
 
 function createStyles(StyleSheet: any) {
   return StyleSheet.create({
-  verifyLink: {
-    position: 'absolute',
-    right: 0,
-    fontSize: 7,
-    margin: 5,
-  },
   title: { marginTop: 30 },
   text: {
     width: '100%',
@@ -249,7 +241,6 @@ export function loadClearanceSettings(): ClearanceSettings {
     if (parsedSettings.defaultsVersion !== clearanceDefaultsVersion) {
       const migratedSettings = {
         ...createDefaultClearanceSettings(),
-        verifyUrl: parsedSettings.verifyUrl ?? defaultClearanceSettings.verifyUrl,
         rows: mergeDefaultRowsWithSavedSignatures(savedRows),
         accountantSignature: parsedSettings.accountantSignature || '',
         registrarSignature: parsedSettings.registrarSignature || '',
@@ -394,7 +385,6 @@ async function ensurePdfRenderer() {
 }
 
 function createClearanceDocument(student: Student, settings: ClearanceSettings) {
-  const fullUrl = settings.verifyUrl || `Verify:${window.location.origin}${location.pathname}${location.search}`
   const studentShift = getClearanceShift(student.shift)
   const tableData = settings.rows.map<ClearanceTableRow>((row) => {
     const signatures = row.signatures?.[studentShift] ?? createEmptyClearanceRowSignatures()[studentShift]
@@ -414,7 +404,6 @@ function createClearanceDocument(student: Student, settings: ClearanceSettings) 
     h(
       Page,
       { size: 'LEGAL' },
-      h(View, { style: styles.verifyLink }, h(Text, null, fullUrl)),
       h(
         View,
         { style: styles.title },
