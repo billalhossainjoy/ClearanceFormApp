@@ -337,6 +337,53 @@ h2 {
   background: #dcfce7;
 }
 
+.update-banner {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+
+.update-banner strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.update-banner p {
+  margin: 0;
+  color: currentColor;
+}
+
+.update-banner.error {
+  border-color: #fecaca;
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.update-banner.installing {
+  border-color: #bbf7d0;
+  color: #166534;
+  background: #dcfce7;
+}
+
+.update-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 180ms ease;
+}
+
 .dismissible-notice {
   grid-template-columns: 1fr auto;
   align-items: start;

@@ -26,6 +26,7 @@ import {
 } from './lib/studentCsv'
 import type {
   AppDataPaths,
+  AppUpdateStatus,
   CsvFileNotice,
   CsvFolderState,
   PageKey,
@@ -54,10 +55,21 @@ const previewPdfUrl = ref('')
 const previewFrame = ref<HTMLIFrameElement | null>(null)
 const printPdfUrl = ref('')
 const printFrame = ref<HTMLIFrameElement | null>(null)
+const appUpdateStatus = ref<AppUpdateStatus | null>(null)
 let saveStatusTimer: number | undefined
 let clearanceStatusTimer: number | undefined
+let updateStatusTimer: number | undefined
 
 const currentPage = computed(() => pages.find((page) => page.key === activePage.value) ?? pages[0])
+const shouldShowUpdateStatus = computed(() =>
+  appUpdateStatus.value
+  && appUpdateStatus.value.state !== 'idle'
+  && appUpdateStatus.value.state !== 'not-available',
+)
+const updateStatusClass = computed(() => ({
+  error: appUpdateStatus.value?.state === 'error',
+  installing: appUpdateStatus.value?.state === 'installing' || appUpdateStatus.value?.state === 'downloaded',
+}))
 
 const students = computed<StudentTableRow[]>(() =>
   csvImports.value.flatMap((csvImport) =>
@@ -95,14 +107,36 @@ const filteredStudents = computed(() => {
 })
 
 onMounted(() => {
+  window.ipcRenderer.on('app-update:status', handleAppUpdateStatus)
   void loadAppDataPaths()
   void loadCsvImports()
 })
 
 onUnmounted(() => {
+  window.ipcRenderer.off('app-update:status', handleAppUpdateStatus)
+  clearUpdateStatusTimer()
   clearPdfPreview()
   clearPrintPdf()
 })
+
+function handleAppUpdateStatus(_event: unknown, status: AppUpdateStatus) {
+  clearUpdateStatusTimer()
+  appUpdateStatus.value = status
+
+  if (status.state === 'not-available' || status.state === 'error') {
+    updateStatusTimer = window.setTimeout(() => {
+      appUpdateStatus.value = null
+      updateStatusTimer = undefined
+    }, 6000)
+  }
+}
+
+function clearUpdateStatusTimer() {
+  if (updateStatusTimer) {
+    window.clearTimeout(updateStatusTimer)
+    updateStatusTimer = undefined
+  }
+}
 
 async function loadCsvImports() {
   isLoadingImports.value = true
@@ -439,6 +473,21 @@ async function saveStudent(student: StudentTableRow) {
 
     <section class="workspace">
       <AppTopbar :page="currentPage" @refresh="loadCsvImports" />
+
+      <section
+        v-if="shouldShowUpdateStatus && appUpdateStatus"
+        class="update-banner"
+        :class="updateStatusClass"
+        aria-live="polite"
+      >
+        <div>
+          <strong>Software update</strong>
+          <p>{{ appUpdateStatus.message }}</p>
+        </div>
+        <div v-if="appUpdateStatus.state === 'downloading'" class="update-progress" aria-hidden="true">
+          <span :style="{ width: `${Math.max(0, Math.min(100, appUpdateStatus.percent ?? 0))}%` }" />
+        </div>
+      </section>
 
       <ImportSettingsPage
         v-if="activePage === 'imports'"

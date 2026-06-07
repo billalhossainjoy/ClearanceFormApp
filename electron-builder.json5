@@ -9,6 +9,14 @@
     "buildResources": "build",
     "output": "release/${version}"
   },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "billalhossainjoy",
+      "repo": "ClearanceFormApp",
+      "releaseType": "release"
+    }
+  ],
   "files": [
     "dist",
     "dist-electron"
@@ -17,7 +25,7 @@
     "target": [
       "dmg"
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+    "artifactName": "Graphic-Arts-Institute-Mac-${version}-Installer.${ext}"
   },
   "win": {
     "icon": "icon.ico",
@@ -36,7 +44,7 @@
         ]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}-Installer.${ext}"
+    "artifactName": "Graphic-Arts-Institute-Windows-${version}-Installer.${ext}"
   },
   "nsis": {
     "installerIcon": "icon.ico",
@@ -51,6 +59,6 @@
     "target": [
       "AppImage"
     ],
-    "artifactName": "${productName}-Linux-${version}.${ext}"
+    "artifactName": "Graphic-Arts-Institute-Linux-${version}.${ext}"
   }
 }

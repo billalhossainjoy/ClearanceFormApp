@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import fs from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -27,6 +28,7 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
+let updateCheckStarted = false
 
 type StoredCsvImport = {
   id: string
@@ -67,6 +69,13 @@ type SaveSignatureImageRequest = {
 
 type DeleteSignatureImageRequest = {
   fileUrl: string
+}
+
+type AppUpdateStatus = {
+  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+  message: string
+  version?: string
+  percent?: number
 }
 
 function getUniquePaths(paths: string[]) {
@@ -475,6 +484,92 @@ async function promptForFolder(title: string, message: string) {
   return result.canceled ? '' : result.filePaths[0] || ''
 }
 
+function sendUpdateStatus(status: AppUpdateStatus) {
+  win?.webContents.send('app-update:status', status)
+}
+
+function registerUpdateHandlers() {
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus({
+      state: 'checking',
+      message: 'Checking for application updates...',
+    })
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus({
+      state: 'available',
+      message: `Version ${info.version} is available. Downloading update...`,
+      version: info.version,
+    })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus({
+      state: 'not-available',
+      message: 'Application is up to date.',
+    })
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdateStatus({
+      state: 'downloading',
+      message: `Downloading update: ${Math.round(progress.percent)}%`,
+      percent: progress.percent,
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateStatus({
+      state: 'downloaded',
+      message: `Version ${info.version} downloaded. Installing update...`,
+      version: info.version,
+    })
+
+    setTimeout(() => {
+      sendUpdateStatus({
+        state: 'installing',
+        message: 'Installing update. The app will restart automatically.',
+        version: info.version,
+      })
+      autoUpdater.quitAndInstall(false, true)
+    }, 1500)
+  })
+
+  autoUpdater.on('error', (error) => {
+    sendUpdateStatus({
+      state: 'error',
+      message: error.message || 'Update check failed.',
+    })
+  })
+
+  ipcMain.handle('app-update:check', async () => {
+    await checkForUpdates()
+  })
+}
+
+async function checkForUpdates() {
+  if (!app.isPackaged) {
+    sendUpdateStatus({
+      state: 'idle',
+      message: 'Updates are checked only in the installed app.',
+    })
+    return
+  }
+
+  try {
+    await autoUpdater.checkForUpdates()
+  } catch (error) {
+    sendUpdateStatus({
+      state: 'error',
+      message: error instanceof Error ? error.message : 'Update check failed.',
+    })
+  }
+}
+
 async function runFirstLaunchFolderSetup() {
   const settings = await readAppLocationSettings()
 
@@ -512,6 +607,12 @@ function createWindow() {
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    if (!updateCheckStarted) {
+      updateCheckStarted = true
+      setTimeout(() => {
+        void checkForUpdates()
+      }, 1500)
+    }
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -542,6 +643,7 @@ app.on('activate', () => {
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
+  registerUpdateHandlers()
   await runFirstLaunchFolderSetup()
   registerAppDataHandlers()
   registerCsvFolderHandlers()

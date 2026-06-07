@@ -43,6 +43,13 @@ export type CsvFileNotice = {
   detail?: string
 }
 
+export type AppUpdateStatus = {
+  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+  message: string
+  version?: string
+  percent?: number
+}
+
 export type StudentTableRow = Student & {
   sourceFile: string
   sourceFilePath: string
