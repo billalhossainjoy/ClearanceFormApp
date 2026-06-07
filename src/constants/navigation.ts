@@ -13,7 +13,7 @@ export const pages: PageDefinition[] = [
   },
   {
     key: 'clearance',
-    label: 'Clearance',
+    label: 'Signetures',
     description: 'Edit clearance PDF text, department rows, and signature images.',
   },
 ]

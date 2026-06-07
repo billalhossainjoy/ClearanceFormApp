@@ -1,7 +1,7 @@
 {
   "name": "gai",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Clearance management desktop application",
   "author": "Graphic Arts Institute",
   "type": "module",
