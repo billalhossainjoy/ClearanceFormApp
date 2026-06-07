@@ -188,21 +188,23 @@ function readFileAsDataUrl(file: File) {
           <h2>Department Rows</h2>
           <p>Add the rows and signatures that should appear in the clearance table.</p>
         </div>
-        <label class="shift-selector">
-          Shift Signatures
-          <select v-model="selectedClearanceShift">
-            <option v-for="shift in clearanceShifts" :key="shift" :value="shift">
-              {{ shift }} shift
-            </option>
-          </select>
-        </label>
-        <div class="button-group">
-          <button class="secondary-action" type="button" @click="restoreDefaultClearanceRows">
-            Default Rows
-          </button>
-          <button class="primary-action" type="button" @click="addClearanceRow">
-            Add Row
-          </button>
+        <div class="settings-toolbar">
+          <label class="shift-selector">
+            Shift Signatures
+            <select v-model="selectedClearanceShift">
+              <option v-for="shift in clearanceShifts" :key="shift" :value="shift">
+                {{ shift }} shift
+              </option>
+            </select>
+          </label>
+          <div class="button-group">
+            <button class="secondary-action" type="button" @click="restoreDefaultClearanceRows">
+              Default Rows
+            </button>
+            <button class="primary-action" type="button" @click="addClearanceRow">
+              Add Row
+            </button>
+          </div>
         </div>
       </div>
 

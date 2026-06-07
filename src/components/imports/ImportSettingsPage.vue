@@ -50,17 +50,19 @@ const emit = defineEmits<{
           <h2>Application Storage</h2>
           <p>Signature images and app settings are stored outside the install folder.</p>
         </div>
-        <button
-          class="secondary-action"
-          type="button"
-          :disabled="!appDataPaths"
-          @click="emit('openImagesFolder')"
-        >
-          Open Signature Folder
-        </button>
-        <button class="primary-action" type="button" @click="emit('selectSignatureFolder')">
-          Change Signature Folder
-        </button>
+        <div class="button-group">
+          <button
+            class="secondary-action"
+            type="button"
+            :disabled="!appDataPaths"
+            @click="emit('openImagesFolder')"
+          >
+            Open Signature Folder
+          </button>
+          <button class="primary-action" type="button" @click="emit('selectSignatureFolder')">
+            Change Signature Folder
+          </button>
+        </div>
       </div>
 
       <div class="folder-source">

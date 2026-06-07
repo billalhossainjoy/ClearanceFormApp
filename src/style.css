@@ -308,6 +308,10 @@ h2 {
   margin-bottom: 18px;
 }
 
+.panel-heading > div:first-child {
+  min-width: 0;
+}
+
 .panel-heading h2 {
   margin-bottom: 6px;
 }
@@ -346,6 +350,13 @@ h2 {
   display: flex;
   gap: 10px;
   margin-top: 16px;
+}
+
+.settings-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .file-drop {
@@ -824,7 +835,8 @@ th {
   .table-header,
   .button-group,
   .action-cell,
-  .settings-actions {
+  .settings-actions,
+  .settings-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
@@ -859,6 +871,11 @@ th {
   .signature-actions .file-action,
   .signature-actions button {
     flex: 1 1 120px;
+  }
+
+  .panel-heading .button-group,
+  .settings-toolbar .button-group {
+    width: 100%;
   }
 
   .upload-panel,

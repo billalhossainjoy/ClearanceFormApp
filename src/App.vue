@@ -111,9 +111,15 @@ const filteredStudents = computed(() => {
   )
 })
 
-const departmentFilterOptions = computed(() => getUniqueSortedOptions(students.value.map((student) => student.technology)))
-const sessionFilterOptions = computed(() => getUniqueSortedOptions(students.value.map((student) => student.session)))
-const shiftFilterOptions = computed(() => getUniqueSortedOptions(students.value.map((student) => student.shift)))
+const departmentFilterOptions = computed(() =>
+  mergeOptions(technologyOptions, students.value.map((student) => student.technology)),
+)
+const sessionFilterOptions = computed(() =>
+  mergeOptions(sessionOptions, students.value.map((student) => student.session)),
+)
+const shiftFilterOptions = computed(() =>
+  mergeOptions(shiftOptions, students.value.map((student) => student.shift)),
+)
 const selectedStudents = computed(() =>
   students.value.filter((student) => selectedStudentKeySet.value.has(getStudentKey(student))),
 )
@@ -217,8 +223,11 @@ function getStudentKey(student: StudentTableRow) {
   return `${student.sourceFilePath}-${student.rowIndex}`
 }
 
-function getUniqueSortedOptions(options: string[]) {
-  return Array.from(new Set(options.filter(Boolean))).sort((first, second) => first.localeCompare(second))
+function mergeOptions(preferredOptions: string[], extraOptions: string[]) {
+  return [
+    ...preferredOptions,
+    ...extraOptions.filter((option) => option && !preferredOptions.includes(option)),
+  ]
 }
 
 function resetStudentFilters() {
@@ -729,7 +738,7 @@ async function saveStudent(student: StudentTableRow) {
                   />
                 </th>
                 <th>Name</th>
-                <th>Technology</th>
+                <th>Department</th>
                 <th>Roll</th>
                 <th>Registration No</th>
                 <th>Session</th>
@@ -751,8 +760,8 @@ async function saveStudent(student: StudentTableRow) {
                   </td>
                   <td><input v-model="editingStudent.name" aria-label="Name" /></td>
                   <td>
-                    <select v-model="editingStudent.technology" aria-label="Technology">
-                      <option value="" disabled>Select technology</option>
+                    <select v-model="editingStudent.technology" aria-label="Department">
+                      <option value="" disabled>Select department</option>
                       <option
                         v-for="technology in technologyOptions"
                         :key="technology"

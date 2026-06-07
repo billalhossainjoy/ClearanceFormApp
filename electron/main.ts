@@ -521,7 +521,7 @@ function registerUpdateHandlers() {
         message: 'Installing update. The app will restart automatically.',
         version: info.version,
       })
-      autoUpdater.quitAndInstall(false, true)
+      autoUpdater.quitAndInstall(true, true)
     }, 1500)
   })
 
@@ -547,7 +547,14 @@ async function checkForUpdates() {
 async function runFirstLaunchFolderSetup() {
   const settings = await readAppLocationSettings()
 
-  if (settings.firstRunSetupCompleted) {
+  if (settings.firstRunSetupCompleted || settings.csvFolderPath || settings.signatureFolderPath) {
+    if (!settings.firstRunSetupCompleted) {
+      await writeAppLocationSettings({
+        ...settings,
+        firstRunSetupCompleted: true,
+      })
+    }
+
     return
   }
 
