@@ -132,6 +132,70 @@ button:disabled {
   overflow: auto;
 }
 
+.update-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.update-modal {
+  display: grid;
+  width: min(440px, 100%);
+  gap: 16px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 28px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+  text-align: center;
+}
+
+.update-modal h2 {
+  margin-bottom: 6px;
+}
+
+.update-modal p,
+.update-modal small {
+  margin: 0;
+  color: #64748b;
+}
+
+.update-loader {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+  border: 5px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: update-spin 800ms linear infinite;
+}
+
+.update-progress {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 180ms ease;
+}
+
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -335,53 +399,6 @@ h2 {
 .notice.success {
   color: #166534;
   background: #dcfce7;
-}
-
-.update-banner {
-  display: grid;
-  gap: 10px;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  padding: 14px 16px;
-  color: #1e3a8a;
-  background: #eff6ff;
-}
-
-.update-banner strong {
-  display: block;
-  margin-bottom: 3px;
-}
-
-.update-banner p {
-  margin: 0;
-  color: currentColor;
-}
-
-.update-banner.error {
-  border-color: #fecaca;
-  color: #991b1b;
-  background: #fee2e2;
-}
-
-.update-banner.installing {
-  border-color: #bbf7d0;
-  color: #166534;
-  background: #dcfce7;
-}
-
-.update-progress {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.18);
-}
-
-.update-progress span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #2563eb;
-  transition: width 180ms ease;
 }
 
 .dismissible-notice {

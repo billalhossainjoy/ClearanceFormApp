@@ -61,15 +61,11 @@ let clearanceStatusTimer: number | undefined
 let updateStatusTimer: number | undefined
 
 const currentPage = computed(() => pages.find((page) => page.key === activePage.value) ?? pages[0])
-const shouldShowUpdateStatus = computed(() =>
+const shouldShowUpdateModal = computed(() =>
   appUpdateStatus.value
-  && appUpdateStatus.value.state !== 'idle'
-  && appUpdateStatus.value.state !== 'not-available',
+  && ['available', 'downloading', 'downloaded', 'installing'].includes(appUpdateStatus.value.state),
 )
-const updateStatusClass = computed(() => ({
-  error: appUpdateStatus.value?.state === 'error',
-  installing: appUpdateStatus.value?.state === 'installing' || appUpdateStatus.value?.state === 'downloaded',
-}))
+const updateProgressPercent = computed(() => Math.max(0, Math.min(100, appUpdateStatus.value?.percent ?? 0)))
 
 const students = computed<StudentTableRow[]>(() =>
   csvImports.value.flatMap((csvImport) =>
@@ -474,20 +470,19 @@ async function saveStudent(student: StudentTableRow) {
     <section class="workspace">
       <AppTopbar :page="currentPage" @refresh="loadCsvImports" />
 
-      <section
-        v-if="shouldShowUpdateStatus && appUpdateStatus"
-        class="update-banner"
-        :class="updateStatusClass"
-        aria-live="polite"
-      >
-        <div>
-          <strong>Software update</strong>
-          <p>{{ appUpdateStatus.message }}</p>
+      <div v-if="shouldShowUpdateModal && appUpdateStatus" class="update-overlay" aria-live="assertive">
+        <div class="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-title">
+          <div class="update-loader" aria-hidden="true" />
+          <div>
+            <h2 id="update-title">Updating application</h2>
+            <p>{{ appUpdateStatus.message }}</p>
+          </div>
+          <div class="update-progress" aria-hidden="true">
+            <span :style="{ width: `${appUpdateStatus.state === 'downloading' ? updateProgressPercent : 100}%` }" />
+          </div>
+          <small>Please wait. The app will restart automatically after the update is installed.</small>
         </div>
-        <div v-if="appUpdateStatus.state === 'downloading'" class="update-progress" aria-hidden="true">
-          <span :style="{ width: `${Math.max(0, Math.min(100, appUpdateStatus.percent ?? 0))}%` }" />
-        </div>
-      </section>
+      </div>
 
       <ImportSettingsPage
         v-if="activePage === 'imports'"
