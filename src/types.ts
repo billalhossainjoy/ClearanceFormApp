@@ -44,7 +44,7 @@ export type CsvFileNotice = {
 }
 
 export type AppUpdateStatus = {
-  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+  state: 'available' | 'downloading' | 'downloaded' | 'installing'
   message: string
   version?: string
   percent?: number

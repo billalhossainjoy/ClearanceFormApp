@@ -58,7 +58,6 @@ const printFrame = ref<HTMLIFrameElement | null>(null)
 const appUpdateStatus = ref<AppUpdateStatus | null>(null)
 let saveStatusTimer: number | undefined
 let clearanceStatusTimer: number | undefined
-let updateStatusTimer: number | undefined
 
 const currentPage = computed(() => pages.find((page) => page.key === activePage.value) ?? pages[0])
 const shouldShowUpdateModal = computed(() =>
@@ -110,28 +109,12 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.ipcRenderer.off('app-update:status', handleAppUpdateStatus)
-  clearUpdateStatusTimer()
   clearPdfPreview()
   clearPrintPdf()
 })
 
 function handleAppUpdateStatus(_event: unknown, status: AppUpdateStatus) {
-  clearUpdateStatusTimer()
   appUpdateStatus.value = status
-
-  if (status.state === 'not-available' || status.state === 'error') {
-    updateStatusTimer = window.setTimeout(() => {
-      appUpdateStatus.value = null
-      updateStatusTimer = undefined
-    }, 6000)
-  }
-}
-
-function clearUpdateStatusTimer() {
-  if (updateStatusTimer) {
-    window.clearTimeout(updateStatusTimer)
-    updateStatusTimer = undefined
-  }
 }
 
 async function loadCsvImports() {

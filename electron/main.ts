@@ -72,7 +72,7 @@ type DeleteSignatureImageRequest = {
 }
 
 type AppUpdateStatus = {
-  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+  state: 'available' | 'downloading' | 'downloaded' | 'installing'
   message: string
   version?: string
   percent?: number
@@ -492,25 +492,11 @@ function registerUpdateHandlers() {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
-  autoUpdater.on('checking-for-update', () => {
-    sendUpdateStatus({
-      state: 'checking',
-      message: 'Checking for application updates...',
-    })
-  })
-
   autoUpdater.on('update-available', (info) => {
     sendUpdateStatus({
       state: 'available',
       message: `Version ${info.version} is available. Downloading update...`,
       version: info.version,
-    })
-  })
-
-  autoUpdater.on('update-not-available', () => {
-    sendUpdateStatus({
-      state: 'not-available',
-      message: 'Application is up to date.',
     })
   })
 
@@ -539,12 +525,7 @@ function registerUpdateHandlers() {
     }, 1500)
   })
 
-  autoUpdater.on('error', (error) => {
-    sendUpdateStatus({
-      state: 'error',
-      message: error.message || 'Update check failed.',
-    })
-  })
+  autoUpdater.on('error', () => {})
 
   ipcMain.handle('app-update:check', async () => {
     await checkForUpdates()
@@ -553,20 +534,13 @@ function registerUpdateHandlers() {
 
 async function checkForUpdates() {
   if (!app.isPackaged) {
-    sendUpdateStatus({
-      state: 'idle',
-      message: 'Updates are checked only in the installed app.',
-    })
     return
   }
 
   try {
     await autoUpdater.checkForUpdates()
-  } catch (error) {
-    sendUpdateStatus({
-      state: 'error',
-      message: error instanceof Error ? error.message : 'Update check failed.',
-    })
+  } catch {
+    // Keep update checks silent when no published release/update feed exists.
   }
 }
 
