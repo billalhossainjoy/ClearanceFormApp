@@ -334,9 +334,13 @@ function mergeDefaultRowsWithSavedSignatures(savedRows: StoredClearanceRow[]) {
 }
 
 export async function createClearancePdfUrl(student: Student, settings: ClearanceSettings) {
+  return createClearanceBatchPdfUrl([student], settings)
+}
+
+export async function createClearanceBatchPdfUrl(students: Student[], settings: ClearanceSettings) {
   const renderer = await ensurePdfRenderer()
 
-  const blob = await renderer.pdf(createClearanceDocument(student, settings)).toBlob()
+  const blob = await renderer.pdf(createClearanceDocument(students, settings)).toBlob()
 
   return URL.createObjectURL(blob)
 }
@@ -348,6 +352,19 @@ export async function downloadClearancePdf(student: Student, settings: Clearance
   try {
     link.href = url
     link.download = `clearance-form-${student.roll || 'student'}.pdf`
+    link.click()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+export async function downloadClearanceBatchPdf(students: Student[], settings: ClearanceSettings) {
+  const url = await createClearanceBatchPdfUrl(students, settings)
+  const link = document.createElement('a')
+
+  try {
+    link.href = url
+    link.download = `clearance-forms-${students.length}-students.pdf`
     link.click()
   } finally {
     URL.revokeObjectURL(url)
@@ -384,7 +401,15 @@ async function ensurePdfRenderer() {
   return rendererReady as Promise<{ pdf: any }>
 }
 
-function createClearanceDocument(student: Student, settings: ClearanceSettings) {
+function createClearanceDocument(students: Student[], settings: ClearanceSettings) {
+  return h(
+    Document,
+    null,
+    ...students.map((student) => createClearancePage(student, settings)),
+  )
+}
+
+function createClearancePage(student: Student, settings: ClearanceSettings) {
   const studentShift = getClearanceShift(student.shift)
   const tableData = settings.rows.map<ClearanceTableRow>((row) => {
     const signatures = row.signatures?.[studentShift] ?? createEmptyClearanceRowSignatures()[studentShift]
@@ -399,11 +424,8 @@ function createClearanceDocument(student: Student, settings: ClearanceSettings) 
   })
 
   return h(
-    Document,
-    null,
-    h(
-      Page,
-      { size: 'LEGAL' },
+    Page,
+    { key: `${student.roll}-${student.registrationNo}`, size: 'LEGAL' },
       h(
         View,
         { style: styles.title },
@@ -501,7 +523,6 @@ function createClearanceDocument(student: Student, settings: ClearanceSettings) 
         createReceiptBox('উপরিমতে টাকা .................. মাত্র গ্রহন করলাম', 'ছাত্র ছাত্রীর স্বাক্ষর '),
         createReceiptBox('উপরিমতে টাকা .................. মাত্র প্রদান করলাম', 'কোষাধক্ষ্য '),
       ),
-    ),
   )
 }
 

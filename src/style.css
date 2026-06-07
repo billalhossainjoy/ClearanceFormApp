@@ -517,8 +517,51 @@ h2 {
   color: #64748b;
 }
 
-.table-header input {
+.student-search {
   max-width: 280px;
+  width: 100%;
+}
+
+.student-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.student-controls label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.student-controls span {
+  font-size: 0.86rem;
+}
+
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.select-column {
+  width: 46px;
+  text-align: center;
+}
+
+.select-column input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
 }
 
 input,
@@ -582,7 +625,7 @@ textarea {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1120px;
+  min-width: 1180px;
 }
 
 th,
@@ -786,7 +829,7 @@ th {
     flex-direction: column;
   }
 
-  .table-header input {
+  .student-search {
     max-width: none;
   }
 
@@ -795,8 +838,14 @@ th {
   .clearance-form,
   .signature-grid,
   .footer-signature-grid,
-  .student-form {
+  .student-form,
+  .student-controls {
     grid-template-columns: 1fr;
+  }
+
+  .selection-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .row-fields {

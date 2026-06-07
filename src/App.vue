@@ -7,8 +7,10 @@ import ImportSettingsPage from './components/imports/ImportSettingsPage.vue'
 import NoticeMessage from './components/NoticeMessage.vue'
 import { pages } from './constants/navigation'
 import {
+  createClearanceBatchPdfUrl,
   createClearancePdfUrl,
   defaultClearanceSettings,
+  downloadClearanceBatchPdf,
   downloadClearancePdf,
   loadClearanceSettings,
   saveClearanceSettings as persistClearanceSettings,
@@ -39,6 +41,10 @@ const shouldShowPdfPreview = import.meta.env.DEV
 
 const activePage = ref<PageKey>('students')
 const searchTerm = ref('')
+const departmentFilter = ref('')
+const sessionFilter = ref('')
+const shiftFilter = ref('')
+const selectedStudentKeys = ref<string[]>([])
 const selectedFolderPath = ref('')
 const appDataPaths = ref<AppDataPaths | null>(null)
 const csvImports = ref<StoredCsvImport[]>([])
@@ -56,6 +62,7 @@ const previewFrame = ref<HTMLIFrameElement | null>(null)
 const printPdfUrl = ref('')
 const printFrame = ref<HTMLIFrameElement | null>(null)
 const appUpdateStatus = ref<AppUpdateStatus | null>(null)
+const isProcessingSelectedStudents = ref(false)
 let saveStatusTimer: number | undefined
 let clearanceStatusTimer: number | undefined
 
@@ -65,6 +72,7 @@ const shouldShowUpdateModal = computed(() =>
   && ['available', 'downloading', 'downloaded', 'installing'].includes(appUpdateStatus.value.state),
 )
 const updateProgressPercent = computed(() => Math.max(0, Math.min(100, appUpdateStatus.value?.percent ?? 0)))
+const selectedStudentKeySet = computed(() => new Set(selectedStudentKeys.value))
 
 const students = computed<StudentTableRow[]>(() =>
   csvImports.value.flatMap((csvImport) =>
@@ -81,25 +89,38 @@ const students = computed<StudentTableRow[]>(() =>
 const filteredStudents = computed(() => {
   const query = searchTerm.value.trim().toLowerCase()
 
-  if (!query) {
-    return students.value
-  }
-
   return students.value.filter((student) =>
-    [
-      student.name,
-      student.technology,
-      student.roll,
-      student.registrationNo,
-      student.session,
-      student.shift,
-      student.sourceFile,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(query),
+    (!departmentFilter.value || student.technology === departmentFilter.value)
+    && (!sessionFilter.value || student.session === sessionFilter.value)
+    && (!shiftFilter.value || student.shift === shiftFilter.value)
+    && (
+      !query
+      || [
+        student.name,
+        student.technology,
+        student.roll,
+        student.registrationNo,
+        student.session,
+        student.shift,
+        student.sourceFile,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    ),
   )
 })
+
+const departmentFilterOptions = computed(() => getUniqueSortedOptions(students.value.map((student) => student.technology)))
+const sessionFilterOptions = computed(() => getUniqueSortedOptions(students.value.map((student) => student.session)))
+const shiftFilterOptions = computed(() => getUniqueSortedOptions(students.value.map((student) => student.shift)))
+const selectedStudents = computed(() =>
+  students.value.filter((student) => selectedStudentKeySet.value.has(getStudentKey(student))),
+)
+const allFilteredStudentsSelected = computed(() =>
+  filteredStudents.value.length > 0
+  && filteredStudents.value.every((student) => selectedStudentKeySet.value.has(getStudentKey(student))),
+)
 
 onMounted(() => {
   window.ipcRenderer.on('app-update:status', handleAppUpdateStatus)
@@ -175,6 +196,7 @@ function applyCsvFolderState(state: CsvFolderState) {
   selectedFolderPath.value = state.folderPath
   editingStudentKey.value = ''
   editingStudent.value = null
+  selectedStudentKeys.value = []
 
   csvImports.value = state.files.flatMap((csvFile) => {
     const result = parseStudentCsv(csvFile.csvText)
@@ -193,6 +215,40 @@ function applyCsvFolderState(state: CsvFolderState) {
 
 function getStudentKey(student: StudentTableRow) {
   return `${student.sourceFilePath}-${student.rowIndex}`
+}
+
+function getUniqueSortedOptions(options: string[]) {
+  return Array.from(new Set(options.filter(Boolean))).sort((first, second) => first.localeCompare(second))
+}
+
+function resetStudentFilters() {
+  searchTerm.value = ''
+  departmentFilter.value = ''
+  sessionFilter.value = ''
+  shiftFilter.value = ''
+}
+
+function toggleStudentSelection(student: StudentTableRow, checked: boolean) {
+  const studentKey = getStudentKey(student)
+
+  if (checked) {
+    selectedStudentKeys.value = Array.from(new Set([...selectedStudentKeys.value, studentKey]))
+    return
+  }
+
+  selectedStudentKeys.value = selectedStudentKeys.value.filter((key) => key !== studentKey)
+}
+
+function toggleAllFilteredStudents(checked: boolean) {
+  const filteredKeys = filteredStudents.value.map((student) => getStudentKey(student))
+
+  if (checked) {
+    selectedStudentKeys.value = Array.from(new Set([...selectedStudentKeys.value, ...filteredKeys]))
+    return
+  }
+
+  const filteredKeySet = new Set(filteredKeys)
+  selectedStudentKeys.value = selectedStudentKeys.value.filter((key) => !filteredKeySet.has(key))
 }
 
 function startEditingStudent(student: StudentTableRow) {
@@ -311,6 +367,108 @@ async function previewStudentClearance(student: StudentTableRow) {
     })
   } finally {
     previewingStudentKey.value = ''
+  }
+}
+
+async function printSelectedStudents() {
+  if (!selectedStudents.value.length) {
+    return
+  }
+
+  isProcessingSelectedStudents.value = true
+
+  try {
+    clearPdfPreview()
+    clearPrintPdf()
+    printPdfUrl.value = await createClearanceBatchPdfUrl(selectedStudents.value, clearanceSettings.value)
+  } catch (error) {
+    console.error('Selected clearance PDF print failed.', error)
+    showSaveStatus({
+      fileName: 'Selected students',
+      status: 'error',
+      message: getErrorMessage(error),
+      detail: `${selectedStudents.value.length} selected row(s)`,
+    })
+  } finally {
+    isProcessingSelectedStudents.value = false
+  }
+}
+
+async function downloadSelectedStudents() {
+  if (!selectedStudents.value.length) {
+    return
+  }
+
+  isProcessingSelectedStudents.value = true
+
+  try {
+    await downloadClearanceBatchPdf(selectedStudents.value, clearanceSettings.value)
+  } catch (error) {
+    console.error('Selected clearance PDF download failed.', error)
+    showSaveStatus({
+      fileName: 'Selected students',
+      status: 'error',
+      message: getErrorMessage(error),
+      detail: `${selectedStudents.value.length} selected row(s)`,
+    })
+  } finally {
+    isProcessingSelectedStudents.value = false
+  }
+}
+
+async function deleteSelectedStudents() {
+  const studentsToDelete = selectedStudents.value
+
+  if (!studentsToDelete.length) {
+    return
+  }
+
+  const confirmed = window.confirm(`Delete ${studentsToDelete.length} selected student row(s) from the source CSV file(s)?`)
+
+  if (!confirmed) {
+    return
+  }
+
+  const selectedKeys = new Set(studentsToDelete.map((student) => getStudentKey(student)))
+  const affectedImports = csvImports.value.filter((csvImport) =>
+    csvImport.students.some((_student, rowIndex) =>
+      selectedKeys.has(`${csvImport.filePath}-${rowIndex}`),
+    ),
+  )
+
+  isProcessingSelectedStudents.value = true
+
+  try {
+    let latestState: CsvFolderState | null = null
+
+    for (const csvImport of affectedImports) {
+      const remainingStudents = csvImport.students.filter(
+        (_student, rowIndex) => !selectedKeys.has(`${csvImport.filePath}-${rowIndex}`),
+      )
+
+      latestState = (await window.ipcRenderer.invoke('csv-file:save', {
+        filePath: csvImport.filePath,
+        csvText: createStudentCsv(remainingStudents),
+      })) as CsvFolderState
+    }
+
+    if (latestState) {
+      applyCsvFolderState(latestState)
+    }
+
+    showSaveStatus({
+      fileName: 'Selected students',
+      status: 'success',
+      message: `${studentsToDelete.length} selected row(s) deleted from source CSV file(s).`,
+    })
+  } catch {
+    showSaveStatus({
+      fileName: 'Selected students',
+      status: 'error',
+      message: 'Selected rows could not be deleted from the source CSV file(s).',
+    })
+  } finally {
+    isProcessingSelectedStudents.value = false
   }
 }
 
@@ -488,15 +646,88 @@ async function saveStudent(student: StudentTableRow) {
             <p v-if="csvImports.length">Loaded from {{ csvImports.length }} valid CSV file(s).</p>
             <p v-else>No valid CSV file has been loaded yet.</p>
           </div>
-          <input v-model="searchTerm" type="search" placeholder="Search students" />
+          <div class="student-search">
+            <input v-model="searchTerm" type="search" placeholder="Search students" />
+          </div>
         </div>
 
         <NoticeMessage v-if="saveStatus" :notice="saveStatus" @close="clearSaveStatus" />
+
+        <div class="student-controls">
+          <label>
+            <span>Department</span>
+            <select v-model="departmentFilter">
+              <option value="">All departments</option>
+              <option v-for="department in departmentFilterOptions" :key="department" :value="department">
+                {{ department }}
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>Session</span>
+            <select v-model="sessionFilter">
+              <option value="">All sessions</option>
+              <option v-for="session in sessionFilterOptions" :key="session" :value="session">
+                {{ session }}
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>Shift</span>
+            <select v-model="shiftFilter">
+              <option value="">All shifts</option>
+              <option v-for="shift in shiftFilterOptions" :key="shift" :value="shift">
+                {{ shift }}
+              </option>
+            </select>
+          </label>
+          <button class="secondary-action" type="button" @click="resetStudentFilters">
+            Clear Filters
+          </button>
+        </div>
+
+        <div v-if="students.length" class="selection-toolbar">
+          <strong>{{ selectedStudents.length }} selected</strong>
+          <div class="button-group">
+            <button
+              class="secondary-action compact"
+              type="button"
+              :disabled="!selectedStudents.length || isProcessingSelectedStudents"
+              @click="printSelectedStudents"
+            >
+              Print Selected
+            </button>
+            <button
+              class="primary-action compact"
+              type="button"
+              :disabled="!selectedStudents.length || isProcessingSelectedStudents"
+              @click="downloadSelectedStudents"
+            >
+              Download Selected
+            </button>
+            <button
+              class="danger-action compact"
+              type="button"
+              :disabled="!selectedStudents.length || isProcessingSelectedStudents"
+              @click="deleteSelectedStudents"
+            >
+              Delete Selected
+            </button>
+          </div>
+        </div>
 
         <div v-if="filteredStudents.length" class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th class="select-column">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible students"
+                    :checked="allFilteredStudentsSelected"
+                    @change="toggleAllFilteredStudents(($event.target as HTMLInputElement).checked)"
+                  />
+                </th>
                 <th>Name</th>
                 <th>Technology</th>
                 <th>Roll</th>
@@ -510,6 +741,14 @@ async function saveStudent(student: StudentTableRow) {
             <tbody>
               <tr v-for="student in filteredStudents" :key="getStudentKey(student)">
                 <template v-if="editingStudentKey === getStudentKey(student) && editingStudent">
+                  <td class="select-column">
+                    <input
+                      type="checkbox"
+                      aria-label="Select student"
+                      :checked="selectedStudentKeySet.has(getStudentKey(student))"
+                      @change="toggleStudentSelection(student, ($event.target as HTMLInputElement).checked)"
+                    />
+                  </td>
                   <td><input v-model="editingStudent.name" aria-label="Name" /></td>
                   <td>
                     <select v-model="editingStudent.technology" aria-label="Technology">
@@ -552,6 +791,14 @@ async function saveStudent(student: StudentTableRow) {
                   </td>
                 </template>
                 <template v-else>
+                  <td class="select-column">
+                    <input
+                      type="checkbox"
+                      aria-label="Select student"
+                      :checked="selectedStudentKeySet.has(getStudentKey(student))"
+                      @change="toggleStudentSelection(student, ($event.target as HTMLInputElement).checked)"
+                    />
+                  </td>
                   <td>{{ student.name }}</td>
                   <td>{{ student.technology }}</td>
                   <td>{{ student.roll }}</td>
@@ -620,7 +867,7 @@ async function saveStudent(student: StudentTableRow) {
           />
         </div>
         <iframe
-          v-if="!shouldShowPdfPreview && printPdfUrl"
+          v-if="printPdfUrl"
           ref="printFrame"
           class="print-frame"
           :src="printPdfUrl"
